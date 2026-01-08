@@ -1,90 +1,294 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import api from '../../api/axios';
-import { UserPlus, Mail, Lock, User, Loader } from 'lucide-react';
+import { UserPlus, Mail, Lock, User, Loader2, UtensilsCrossed, ArrowRight } from 'lucide-react';
+import toast from 'react-hot-toast'; // Sử dụng toast thay cho alert
 
 const Register = () => {
-  const [formData, setFormData] = useState({ username: '', password: '', fullName: '', email: '' });
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
   const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
+  
+  const [formData, setFormData] = useState({ 
+    username: '', 
+    password: '', 
+    fullName: '', 
+    email: '' 
+  });
+
+  const handleChange = (e) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setError('');
+    
+    // Validate cơ bản
+    if(!formData.username || !formData.password || !formData.email || !formData.fullName) {
+        toast.error("Vui lòng điền đầy đủ thông tin!");
+        setLoading(false);
+        return;
+    }
+
     try {
       await api.post('/auth/register', formData);
-      alert("Đăng ký thành công! Hãy đăng nhập để tiếp tục.");
-      navigate('/login');
+      toast.success("Đăng ký thành công! Vui lòng đăng nhập.");
+      
+      // Delay một chút để người dùng đọc thông báo trước khi chuyển trang
+      setTimeout(() => {
+          navigate('/login');
+      }, 1500);
+      
     } catch (err) {
-      setError(err.response?.data || "Có lỗi xảy ra, vui lòng thử lại!");
+      console.error(err);
+      const msg = err.response?.data || "Có lỗi xảy ra, vui lòng thử lại!";
+      toast.error(typeof msg === 'string' ? msg : "Đăng ký thất bại");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="auth-page">
-      <style>{`
-        .auth-page { display: flex; justify-content: center; align-items: center; min-height: calc(100vh - 100px); background: #f9fafb; padding: 20px; font-family: 'Inter', sans-serif; }
-        .auth-card { background: #fff; padding: 40px; border-radius: 20px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1); width: 100%; max-width: 400px; border: 1px solid #e5e7eb; }
-        .auth-header { text-align: center; margin-bottom: 30px; }
-        .auth-header h2 { font-size: 28px; font-weight: 900; color: #111827; margin: 0; }
-        .auth-header p { color: #6b7280; margin-top: 8px; }
-        .input-group { position: relative; margin-bottom: 20px; }
-        .input-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #9ca3af; }
-        .auth-input { width: 100%; padding: 14px 14px 14px 45px; border: 1.5px solid #e5e7eb; border-radius: 12px; outline: none; transition: 0.3s; font-size: 15px; box-sizing: border-box; }
-        .auth-input:focus { border-color: #ef4444; box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.1); }
-        .auth-btn { width: 100%; padding: 14px; background: #ef4444; color: #fff; border: none; border-radius: 12px; font-weight: 700; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; transition: 0.3s; }
-        .auth-btn:hover { background: #dc2626; transform: translateY(-1px); }
-        .error-box { background: #fef2f2; color: #b91c1c; padding: 12px; border-radius: 10px; font-size: 14px; margin-bottom: 20px; text-align: center; border: 1px solid #fecaca; }
-        .auth-footer { text-align: center; margin-top: 25px; font-size: 14px; color: #6b7280; }
-        .auth-link { color: #ef4444; font-weight: 700; text-decoration: none; }
-      `}</style>
+    <div className="auth-wrapper">
+      <div className="auth-background"></div>
 
-      <div className="auth-card">
-        <div className="auth-header">
-          <h2>Tạo tài khoản</h2>
-          <p>Khám phá vạn món ngon cùng FoodReview</p>
+      <div className="auth-card animate-slide-up">
+        {/* Branding Logo */}
+        <div className="brand-section">
+          <div className="logo-circle">
+            <UtensilsCrossed size={32} color="white" />
+          </div>
+          <h1>Food Review</h1>
         </div>
 
-        {error && <div className="error-box">{error}</div>}
+        <div className="auth-header">
+          <h2>Tạo tài khoản mới</h2>
+          <p>Khám phá thế giới ẩm thực ngay hôm nay.</p>
+        </div>
 
-        <form onSubmit={handleSubmit}>
-          <div className="input-group">
-            <User className="input-icon" size={20} />
-            <input type="text" placeholder="Họ và tên" className="auth-input" required
-              onChange={e => setFormData({...formData, fullName: e.target.value})} />
+        <form onSubmit={handleSubmit} className="auth-form">
+          {/* FULL NAME */}
+          <div className="form-group">
+            <div className="input-group">
+              <User size={20} className="input-icon" />
+              <input 
+                type="text" 
+                name="fullName"
+                placeholder="Họ và tên hiển thị" 
+                className="auth-input" 
+                value={formData.fullName}
+                onChange={handleChange}
+                required
+              />
+            </div>
           </div>
 
-          <div className="input-group">
-            <Mail className="input-icon" size={20} />
-            <input type="email" placeholder="Email" className="auth-input" required
-              onChange={e => setFormData({...formData, email: e.target.value})} />
+          {/* EMAIL */}
+          <div className="form-group">
+            <div className="input-group">
+              <Mail size={20} className="input-icon" />
+              <input 
+                type="email" 
+                name="email"
+                placeholder="Địa chỉ Email" 
+                className="auth-input" 
+                value={formData.email}
+                onChange={handleChange}
+                required
+              />
+            </div>
           </div>
 
-          <div className="input-group">
-            <UserPlus className="input-icon" size={20} />
-            <input type="text" placeholder="Tên đăng nhập" className="auth-input" required
-              onChange={e => setFormData({...formData, username: e.target.value})} />
+          {/* USERNAME */}
+          <div className="form-group">
+            <div className="input-group">
+              <UserPlus size={20} className="input-icon" />
+              <input 
+                type="text" 
+                name="username"
+                placeholder="Tên đăng nhập" 
+                className="auth-input" 
+                value={formData.username}
+                onChange={handleChange}
+                required
+              />
+            </div>
           </div>
 
-          <div className="input-group">
-            <Lock className="input-icon" size={20} />
-            <input type="password" placeholder="Mật khẩu" className="auth-input" required
-              onChange={e => setFormData({...formData, password: e.target.value})} />
+          {/* PASSWORD */}
+          <div className="form-group">
+            <div className="input-group">
+              <Lock size={20} className="input-icon" />
+              <input 
+                type="password" 
+                name="password"
+                placeholder="Mật khẩu" 
+                className="auth-input" 
+                value={formData.password}
+                onChange={handleChange}
+                required
+              />
+            </div>
           </div>
 
-          <button type="submit" className="auth-btn" disabled={loading}>
-            {loading ? <Loader className="animate-spin" size={20} /> : "Đăng ký thành viên"}
+          <button type="submit" className="btn-submit" disabled={loading}>
+            {loading ? (
+                <Loader2 className="animate-spin" size={20} />
+            ) : (
+                <>Đăng ký ngay <ArrowRight size={20} /></>
+            )}
           </button>
         </form>
 
         <div className="auth-footer">
-          Đã có tài khoản? <Link to="/login" className="auth-link">Đăng nhập ngay</Link>
+          <p>Đã có tài khoản? <Link to="/login">Đăng nhập ngay</Link></p>
         </div>
       </div>
+
+      {/* --- CSS STYLING (Đồng bộ với Login) --- */}
+      <style>{`
+        .auth-wrapper {
+          position: relative;
+          min-height: 100vh;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background-color: #f8fafc;
+          font-family: 'Inter', system-ui, sans-serif;
+          overflow: hidden;
+          padding: 20px;
+        }
+
+        .auth-background {
+          position: absolute;
+          width: 100%;
+          height: 100%;
+          background: linear-gradient(135deg, #fff1f2 0%, #ffe4e6 100%);
+          z-index: 0;
+        }
+        
+        /* Bong bóng trang trí nền */
+        .auth-background::before, .auth-background::after {
+          content: '';
+          position: absolute;
+          border-radius: 50%;
+          filter: blur(60px);
+          z-index: 0;
+        }
+        .auth-background::before {
+          width: 300px; height: 300px;
+          background: #fecaca;
+          top: -50px; left: -50px;
+        }
+        .auth-background::after {
+          width: 400px; height: 400px;
+          background: #fde047;
+          bottom: -100px; right: -100px;
+          opacity: 0.3;
+        }
+
+        /* Thẻ Card chính */
+        .auth-card {
+          position: relative;
+          z-index: 1;
+          background: rgba(255, 255, 255, 0.95);
+          backdrop-filter: blur(10px);
+          width: 100%;
+          max-width: 440px;
+          padding: 40px;
+          border-radius: 24px;
+          box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.1);
+          border: 1px solid rgba(255, 255, 255, 0.5);
+        }
+
+        /* Logo Branding */
+        .brand-section {
+          display: flex; flex-direction: column; align-items: center; margin-bottom: 20px;
+        }
+        .logo-circle {
+          width: 60px; height: 60px;
+          background: linear-gradient(135deg, #ef4444, #dc2626);
+          border-radius: 16px;
+          display: flex; align-items: center; justify-content: center;
+          margin-bottom: 12px;
+          box-shadow: 0 8px 16px rgba(239, 68, 68, 0.3);
+          transform: rotate(-5deg);
+        }
+        .brand-section h1 {
+          font-size: 24px; fontWeight: 800; color: #1e293b; letter-spacing: -0.5px; margin: 0;
+        }
+
+        .auth-header { text-align: center; margin-bottom: 25px; }
+        .auth-header h2 { font-size: 20px; color: #334155; margin: 0 0 5px; fontWeight: 700; }
+        .auth-header p { font-size: 14px; color: #64748b; margin: 0; }
+
+        /* Form Inputs */
+        .form-group { margin-bottom: 16px; }
+        
+        .input-group { position: relative; transition: all 0.2s ease; }
+        .input-icon {
+          position: absolute; left: 16px; top: 50%;
+          transform: translateY(-50%);
+          color: #94a3b8; transition: color 0.2s;
+        }
+        .auth-input {
+          width: 100%;
+          padding: 14px 16px 14px 48px;
+          border: 2px solid #e2e8f0;
+          border-radius: 12px;
+          font-size: 15px; color: #1e293b;
+          background: #f8fafc;
+          outline: none; transition: all 0.2s;
+          box-sizing: border-box;
+        }
+        .auth-input:focus {
+          background: #fff;
+          border-color: #ef4444;
+          box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.1);
+        }
+        .auth-input:focus ~ .input-icon { color: #ef4444; }
+        .auth-input::placeholder { color: #cbd5e1; }
+
+        /* Button */
+        .btn-submit {
+          width: 100%; padding: 14px; margin-top: 10px;
+          background: linear-gradient(to right, #ef4444, #dc2626);
+          color: white; border: none; border-radius: 12px;
+          font-size: 16px; fontWeight: 600; cursor: pointer;
+          display: flex; align-items: center; justify-content: center; gap: 10px;
+          transition: all 0.2s;
+          box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+        }
+        .btn-submit:hover:not(:disabled) {
+          transform: translateY(-2px);
+          box-shadow: 0 6px 16px rgba(239, 68, 68, 0.4);
+        }
+        .btn-submit:disabled { opacity: 0.7; cursor: not-allowed; }
+
+        .auth-footer {
+          margin-top: 25px; text-align: center;
+          font-size: 14px; color: #64748b;
+          border-top: 1px solid #f1f5f9; padding-top: 20px;
+        }
+        .auth-footer a {
+          color: #1e293b; fontWeight: 700; text-decoration: none; margin-left: 4px;
+        }
+        .auth-footer a:hover { color: #ef4444; text-decoration: underline; }
+
+        /* Animations */
+        @keyframes slide-up {
+          from { opacity: 0; transform: translateY(20px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-slide-up { animation: slide-up 0.5s cubic-bezier(0.16, 1, 0.3, 1); }
+        .animate-spin { animation: spin 1s linear infinite; }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+        @media (max-width: 480px) {
+          .auth-card { padding: 30px 20px; border-radius: 0; min-height: 100vh; display: flex; flex-direction: column; justify-content: center; }
+          .auth-background { display: none; }
+        }
+      `}</style>
     </div>
   );
 };

@@ -5,13 +5,16 @@ import Footer from '../components/Footer';
 import RestaurantList from './RestaurantList';
 import api from '../api/axios';
 import FoodOptionModal from '../components/FoodOptionModal';
+import Chatbot from "../components/ChatBot"; 
 
-// --- 1. IMPORT CÁC BANNER MỚI ---
+// --- COMPONENTS CON ---
 import HeroBanner from '../components/banners/HeroBanner';
 import FeatureBanners from '../components/banners/FeatureBanners';
 
 import { 
-  Star, Loader, Pizza, Coffee, Utensils, Sandwich, IceCream, Carrot, Beer, Croissant, Plus, Ticket, Copy, Check, ArrowLeft
+  Star, Loader, Pizza, Coffee, Utensils, Sandwich, IceCream, Carrot, Beer, Croissant, 
+  Plus, Ticket, Copy, Check, ArrowLeft, MapPin, Clock, Filter, MessageSquare, Flame, 
+  Calendar // <--- 1. MỚI: Import icon Calendar
 } from 'lucide-react';
 
 const Home = () => {
@@ -19,51 +22,63 @@ const Home = () => {
   
   // --- STATE DỮ LIỆU ---
   const [categories, setCategories] = useState([]);
-  const [randomFoods, setRandomFoods] = useState([]); 
+  const [foods, setFoods] = useState([]); 
   const [vouchers, setVouchers] = useState([]); 
+  const [reviews, setReviews] = useState([]); 
   const [loading, setLoading] = useState(true);
-
-  // --- STATE MODAL & UI ---
+  
+  // --- STATE UI ---
   const [selectedFood, setSelectedFood] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [copiedCode, setCopiedCode] = useState(null); 
+  const [copiedCode, setCopiedCode] = useState(null);
+  const [activeTab, setActiveTab] = useState('suggest'); 
+  const [toast, setToast] = useState(null); 
 
   // --- TỪ ĐIỂN ICON ---
   const categoryIcons = {
-    "pizza": <Pizza size={32} />, "burger": <Sandwich size={32} />, "bánh mì": <Sandwich size={32} />,
-    "cà phê": <Coffee size={32} />, "đồ uống": <Beer size={32} />, "tráng miệng": <IceCream size={32} />,
-    "kem": <IceCream size={32} />, "healthy": <Carrot size={32} />, "chay": <Carrot size={32} />,
-    "bánh ngọt": <Croissant size={32} />, "cơm": <Utensils size={32} />, "phở": <Utensils size={32} />,
-    "bún": <Utensils size={32} />,
+    "pizza": <Pizza size={28} />, "burger": <Sandwich size={28} />, "bánh mì": <Sandwich size={28} />,
+    "cà phê": <Coffee size={28} />, "đồ uống": <Beer size={28} />, "tráng miệng": <IceCream size={28} />,
+    "kem": <IceCream size={28} />, "healthy": <Carrot size={28} />, "chay": <Carrot size={28} />,
+    "bánh ngọt": <Croissant size={28} />, "cơm": <Utensils size={28} />, "phở": <Utensils size={28} />,
+    "bún": <Utensils size={28} />,
   };
 
   const getCategoryIcon = (name) => {
     const key = name?.toLowerCase();
     for (const k in categoryIcons) { if (key && key.includes(k)) return categoryIcons[k]; }
-    return <Utensils size={32} />;
+    return <Utensils size={28} />;
   };
 
-  // --- API CALLS ---
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
         const [resCat, resFood, resVoucher] = await Promise.all([
             api.get('/categories'),
-            api.get('/foods?size=8'),
+            api.get('/foods?size=12'),
             api.get('/user-vouchers/available')
         ]);
 
         const cats = resCat.data || [];
-        setCategories([...cats].sort(() => 0.5 - Math.random()).slice(0, 8));
+        setCategories([...cats].sort(() => 0.5 - Math.random()).slice(0, 10));
 
-        const foods = resFood.data.content || resFood.data || [];
-        setRandomFoods([...foods].sort(() => 0.5 - Math.random()));
+        const foodData = resFood.data.content || resFood.data || [];
+        const enhancedFoods = foodData.map(f => ({
+            ...f,
+            distance: (Math.random() * 5 + 0.5).toFixed(1),
+            time: Math.floor(Math.random() * 30 + 15)
+        }));
+        setFoods(enhancedFoods);
 
         const allVouchers = resVoucher.data || [];
-        // Lọc voucher công khai để hiển thị ở carousel dưới cùng
         const hotVouchers = allVouchers.filter(v => v.type === 'PUBLIC' || v.type === 'EVENT' || v.type === 'REWARD_ORDER').slice(0, 5);
         setVouchers(hotVouchers);
+
+        setReviews([
+            { id: 1, user: "Minh Anh", avatar: "", content: "Pizza ở đây đế mỏng giòn rụm, giao hàng siêu nhanh!", rating: 5, foodName: "Pizza Hải Sản" },
+            { id: 2, user: "Tuấn Hưng", avatar: "", content: "Nước dùng phở đậm đà, thịt bò mềm. Sẽ quay lại.", rating: 4, foodName: "Phở Bò Tái" },
+            { id: 3, user: "Lan Ngọc", avatar: "", content: "Trà sữa hơi ngọt so với mình, nhưng trân châu ngon.", rating: 4, foodName: "Trà Sữa Full Topping" },
+        ]);
 
       } catch (error) {
         console.error("Lỗi tải trang chủ:", error);
@@ -80,16 +95,19 @@ const Home = () => {
   const handleCopyVoucher = (code) => {
     navigator.clipboard.writeText(code);
     setCopiedCode(code);
+    showToast(`Đã sao chép mã: ${code}`);
     setTimeout(() => setCopiedCode(null), 2000); 
   };
 
-  // Hàm chuyển hướng có kiểm tra đăng nhập (Dùng cho nút Xem tất cả voucher dưới list)
+  const showToast = (message) => {
+    setToast(message);
+    setTimeout(() => setToast(null), 3000);
+  };
+
   const handleNavigateProtected = (path) => {
     const user = JSON.parse(localStorage.getItem('user'));
     if (!user) {
-        if(window.confirm("Bạn cần đăng nhập để sử dụng tính năng này! Đi đến trang đăng nhập?")) {
-            navigate('/login');
-        }
+        if(window.confirm("Bạn cần đăng nhập để xem ưu đãi dành riêng cho bạn!")) navigate('/login');
     } else {
         navigate(path);
     }
@@ -103,132 +121,139 @@ const Home = () => {
 
   const formatPrice = (price) => new Intl.NumberFormat('vi-VN').format(price) + 'đ';
 
-  const styles = {
-    layout: "home-layout", main: "home-main", sectionContainer: "home-section-container",
-    sectionTitleWrapper: "home-title-wrapper",
-    badge: "home-badge", titleMain: "home-title-main", titleLight: "home-title-light",
-    categoryGrid: "home-category-grid", categoryItem: "home-category-item", iconCircle: "home-icon-circle",
-    foodGrid: "home-food-grid", foodCard: "home-food-card", foodImg: "home-food-img", foodBody: "home-food-body",
-    foodName: "home-food-name", foodPrice: "home-food-price", btnAdd: "home-btn-add",
-    voucherScroll: "home-voucher-scroll", voucherTicket: "home-voucher-ticket", 
-    vLeft: "home-v-left", vRight: "home-v-right", vDashed: "home-v-dashed", vBtnCopy: "v-btn-copy"
-  };
-
   return (
-    <div className={styles.layout}>
+    <div className="home-layout">
       <style>{`
         .home-layout { min-height: 100vh; display: flex; flex-direction: column; background-color: #F9FAFB; font-family: 'Inter', sans-serif; position: relative; }
         .home-main { flex-grow: 1; }
-        .home-section-container { max-width: 1200px; margin: 0 auto; padding: 50px 20px; width: 100%; box-sizing: border-box; }
-        .home-title-wrapper { margin-bottom: 30px; display: flex; justify-content: space-between; align-items: flex-end; }
-        .home-badge { display: inline-flex; align-items: center; gap: 6px; color: #ef4444; font-weight: bold; font-size: 13px; text-transform: uppercase; background: #fee2e2; padding: 4px 12px; border-radius: 20px; margin-bottom: 8px; }
-        .home-title-main { font-size: 28px; font-weight: 900; color: #111827; margin: 0; line-height: 1.2; }
+        .home-section-container { max-width: 1200px; margin: 0 auto; padding: 40px 20px; width: 100%; box-sizing: border-box; }
+        .home-title-wrapper { margin-bottom: 24px; display: flex; justify-content: space-between; align-items: flex-end; }
+        .home-title-main { font-size: 26px; font-weight: 800; color: #1f2937; margin: 0; display: flex; align-items: center; gap: 8px; }
         .home-title-light { color: #9ca3af; font-weight: 300; }
-        
-        /* CSS CHO NÚT BACK */
-        .home-btn-back {
-            position: fixed; top: 100px; left: 20px; z-index: 100;
-            width: 40px; height: 40px; background: white; border-radius: 50%;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15); display: flex; align-items: center; justify-content: center;
-            cursor: pointer; border: 1px solid #e5e7eb; transition: 0.2s;
-        }
-        .home-btn-back:hover { background: #f3f4f6; transform: scale(1.1); }
-
-        /* Categories */
-        .home-category-grid { display: flex; gap: 24px; overflow-x: auto; padding-bottom: 10px; scrollbar-width: none; }
-        .home-category-item { display: flex; flex-direction: column; align-items: center; gap: 10px; cursor: pointer; min-width: 90px; }
-        .home-icon-circle { width: 70px; height: 70px; border-radius: 50%; background: white; display: flex; align-items: center; justify-content: center; color: #ef4444; border: 1px solid #e5e7eb; transition: 0.3s; }
-        .home-category-item:hover .home-icon-circle { background: #ef4444; color: white; transform: translateY(-5px); border-color: #ef4444; }
-        
-        /* Voucher Carousel Styles */
-        .home-voucher-scroll { display: flex; gap: 20px; overflow-x: auto; padding: 10px 5px 20px; scrollbar-width: thin; }
-        .home-voucher-ticket { min-width: 280px; height: 100px; background: white; border-radius: 12px; display: flex; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); border: 1px solid #e2e8f0; position: relative; transition: 0.3s; overflow: hidden; }
-        .home-voucher-ticket:hover { transform: translateY(-3px); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); border-color: #fca5a5; }
-        .home-v-left { width: 90px; background: #f43f5e; color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; font-weight: bold; font-size: 18px; border-right: 2px dashed white; }
-        .home-v-right { flex: 1; padding: 12px; display: flex; flex-direction: column; justify-content: center; }
-        .v-btn-copy { margin-top: auto; align-self: flex-start; background: #fff1f2; color: #f43f5e; border: none; padding: 4px 12px; border-radius: 4px; font-size: 12px; font-weight: 700; cursor: pointer; display: flex; alignItems: center; gap: 4px; }
-        .v-btn-copy:hover { background: #ffe4e6; }
-
-        /* Food Grid Styles */
-        .home-food-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 24px; }
-        .home-food-card { background: white; border-radius: 16px; overflow: hidden; border: 1px solid #f3f4f6; transition: 0.3s; display: flex; flex-direction: column; cursor: pointer; }
-        .home-food-card:hover { transform: translateY(-5px); box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1); border-color: #fed7aa; }
-        .home-food-img { width: 100%; height: 170px; object-fit: cover; }
+        .home-subtitle { color: #6b7280; font-size: 14px; margin-top: 4px; }
+        .home-see-all { color: #ef4444; font-weight: 600; font-size: 14px; cursor: pointer; transition: 0.2s; }
+        .home-see-all:hover { color: #dc2626; text-decoration: underline; }
+        .home-tabs { display: flex; gap: 12px; margin-bottom: 20px; overflow-x: auto; padding-bottom: 5px; scrollbar-width: none; }
+        .home-tab-btn { padding: 8px 20px; border-radius: 24px; border: 1px solid #e5e7eb; background: white; font-weight: 600; color: #4b5563; cursor: pointer; transition: 0.2s; white-space: nowrap; display: flex; align-items: center; gap: 6px; }
+        .home-tab-btn.active { background: #ef4444; color: white; border-color: #ef4444; box-shadow: 0 4px 10px rgba(239, 68, 68, 0.3); }
+        .home-category-grid { display: flex; gap: 20px; overflow-x: auto; padding: 10px 5px; scrollbar-width: none; }
+        .home-category-item { display: flex; flex-direction: column; align-items: center; gap: 8px; cursor: pointer; min-width: 80px; transition: 0.2s; }
+        .home-icon-circle { width: 64px; height: 64px; border-radius: 20px; background: white; display: flex; align-items: center; justify-content: center; color: #ef4444; box-shadow: 0 2px 8px rgba(0,0,0,0.05); transition: 0.3s; }
+        .home-category-item:hover .home-icon-circle { background: #ef4444; color: white; transform: translateY(-5px); box-shadow: 0 8px 15px rgba(239, 68, 68, 0.25); }
+        .home-category-name { font-size: 13px; font-weight: 600; color: #374151; }
+        .home-voucher-scroll { display: flex; gap: 16px; overflow-x: auto; padding: 10px 5px 20px; scrollbar-width: thin; }
+        .home-voucher-ticket { min-width: 290px; background: white; border-radius: 12px; display: flex; box-shadow: 0 2px 6px rgba(0,0,0,0.06); border: 1px solid #e5e7eb; overflow: hidden; position: relative; transition: 0.3s; }
+        .home-voucher-ticket:hover { transform: translateY(-3px); box-shadow: 0 10px 20px -5px rgba(0,0,0,0.1); }
+        .v-left { width: 80px; background: linear-gradient(135deg, #f43f5e, #e11d48); color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; border-right: 2px dashed #fff; position: relative; }
+        .v-left::before, .v-left::after { content: ''; position: absolute; right: -6px; width: 12px; height: 12px; background: #F9FAFB; border-radius: 50%; }
+        .v-left::before { top: -6px; } .v-left::after { bottom: -6px; }
+        .v-right { flex: 1; padding: 12px; display: flex; flex-direction: column; justify-content: center; }
+        .v-code { font-weight: 800; color: #1f2937; font-size: 15px; letter-spacing: 0.5px; }
+        .v-desc { font-size: 12px; color: #6b7280; margin: 4px 0 8px; line-height: 1.3; }
+        .home-food-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 24px; }
+        .home-food-card { background: white; border-radius: 16px; overflow: hidden; border: 1px solid #f3f4f6; transition: 0.3s; display: flex; flex-direction: column; cursor: pointer; position: relative; }
+        .home-food-card:hover { transform: translateY(-5px); box-shadow: 0 15px 30px -5px rgba(0,0,0,0.1); border-color: #fdba74; }
+        .home-food-img-wrapper { position: relative; width: 100%; height: 170px; }
+        .home-food-img { width: 100%; height: 100%; object-fit: cover; }
+        .food-badge { position: absolute; bottom: 10px; left: 10px; background: rgba(255,255,255,0.95); padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; display: flex; align-items: center; gap: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
         .home-food-body { padding: 16px; flex: 1; display: flex; flex-direction: column; }
-        .home-btn-add { margin-top: auto; width: 100%; background: #f3f4f6; border: none; padding: 10px; border-radius: 8px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; transition: 0.2s; color: #374151; }
-        .home-btn-add:hover { background: #ea580c; color: white; }
-
-        @media (max-width: 768px) {
-            .home-title-main { font-size: 22px; }
-            .home-section-container { padding: 30px 16px; }
-            .home-btn-back { top: 80px; left: 10px; }
-        }
+        .food-meta { display: flex; align-items: center; gap: 12px; font-size: 12px; color: #6b7280; margin-top: 6px; }
+        .food-meta-item { display: flex; align-items: center; gap: 4px; }
+        .home-btn-add { margin-top: 12px; width: 100%; background: #fff7ed; color: #ea580c; border: 1px solid #ffedd5; padding: 10px; border-radius: 8px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; transition: 0.2s; }
+        .home-btn-add:hover { background: #ea580c; color: white; border-color: #ea580c; }
+        .review-scroll { display: flex; gap: 16px; overflow-x: auto; padding-bottom: 10px; scrollbar-width: none; }
+        .review-card { min-width: 280px; max-width: 300px; background: white; padding: 16px; border-radius: 12px; border: 1px solid #e5e7eb; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
+        .review-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+        .review-avatar { width: 36px; height: 36px; background: #e5e7eb; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; color: #6b7280; }
+        .review-content { font-size: 13px; color: #4b5563; line-height: 1.4; font-style: italic; background: #f9fafb; padding: 10px; border-radius: 8px; }
+        .toast-notify { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background: #1f2937; color: white; padding: 12px 24px; border-radius: 30px; z-index: 1000; display: flex; align-items: center; gap: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); animation: slideUp 0.3s ease-out; }
+        @keyframes slideUp { from { transform: translate(-50%, 20px); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
+        @media (max-width: 768px) { .home-section-container { padding: 24px 16px; } .home-title-main { font-size: 20px; } }
       `}</style>
 
-      {/* --- NÚT BACK --- */}
-      <button className="home-btn-back" onClick={() => navigate(-1)} title="Quay lại">
-        <ArrowLeft size={20} color="#4b5563"/>
-      </button>
-
+      {/* --- HEADER --- */}
       <Header />
 
-      <main className={styles.main}>
-        {/* --- 1. HERO BANNER MỚI (Thay thế Slider cũ) --- */}
-        <section className={styles.sectionContainer} style={{paddingBottom: 0}}>
+      {/* --- TOAST NOTIFICATION --- */}
+      {toast && (
+        <div className="toast-notify">
+            <Check size={16} color="#4ade80"/> {toast}
+        </div>
+      )}
+
+      <main className="home-main">
+        {/* 1. HERO BANNER */}
+        <section className="home-section-container" style={{paddingBottom: 0}}>
             <HeroBanner />
         </section>
 
-        {/* --- 2. FEATURE BANNERS MỚI (Thay thế các hộp Promo cũ) --- */}
-        <section className={styles.sectionContainer}>
+        {/* 2. CATEGORIES */}
+        <section className="home-section-container">
+            <div className="home-category-grid">
+                {loading ? <div style={{width:'100%', textAlign:'center'}}>Đang tải danh mục...</div> : 
+                 categories.map((cat) => (
+                    <div key={cat.id} className="home-category-item" onClick={() => navigate(`/search?cat=${cat.id}`)}>
+                        <div className="home-icon-circle">{getCategoryIcon(cat.name)}</div>
+                        <span className="home-category-name">{cat.name}</span>
+                    </div>
+                ))}
+            </div>
+        </section>
+
+        {/* 3. EVENT BANNER (MỚI THÊM) */}
+        <section className="home-section-container" style={{paddingTop: 0, paddingBottom: 0}}>
+            <div style={{
+                background: 'linear-gradient(90deg, #10b981, #059669)',
+                borderRadius: 20, padding: '20px 30px', color: 'white',
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer',
+                boxShadow: '0 4px 15px rgba(16, 185, 129, 0.3)'
+            }} onClick={() => navigate('/events')}>
+                <div>
+                    <h3 style={{margin: '0 0 5px', fontSize: 18, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 8}}>
+                        <Calendar size={20}/> SỰ KIỆN ẨM THỰC
+                    </h3>
+                    <p style={{margin: 0, fontSize: 13, opacity: 0.9}}>Khám phá lễ hội & workshop đang diễn ra</p>
+                </div>
+                <div style={{background: 'rgba(255,255,255,0.2)', padding: 8, borderRadius: '50%'}}>
+                    <ArrowLeft size={24} style={{transform: 'rotate(180deg)', display:'block'}}/>
+                </div>
+            </div>
+        </section>
+
+        {/* 4. FEATURE BANNERS */}
+        <section className="home-section-container">
             <FeatureBanners />
         </section>
 
-        {/* 3. CATEGORIES */}
-        <section className={styles.sectionContainer} style={{paddingTop: 0}}>
-            <div className={styles.sectionTitleWrapper}>
-                <div>
-                   <h2 className={styles.titleMain}>THỰC ĐƠN <span className={styles.titleLight}>HÔM NAY</span></h2>
-                </div>
-            </div>
-            {loading ? <div style={{textAlign:'center', color:'#9ca3af'}}>Đang tải...</div> : (
-               <div className={styles.categoryGrid}>
-                  {categories.map((cat) => (
-                      <div key={cat.id} className={styles.categoryItem} onClick={() => navigate(`/search?cat=${cat.id}`)}>
-                          <div className={styles.iconCircle}>{getCategoryIcon(cat.name)}</div>
-                          <span>{cat.name}</span>
-                      </div>
-                  ))}
-               </div>
-            )}
-        </section>
-
-        {/* 4. VOUCHER CAROUSEL (Hiển thị list voucher công khai) */}
+        {/* 5. VOUCHERS */}
         {vouchers.length > 0 && (
-            <section className={styles.sectionContainer} style={{paddingTop: 0}}>
-                <div className={styles.sectionTitleWrapper} style={{marginBottom: 10}}>
+            <section className="home-section-container" style={{background: '#fff', padding: '30px 20px', margin: '20px auto', borderRadius: 20}}>
+                <div className="home-title-wrapper">
                     <div>
-                        <div className={styles.badge} style={{background:'#fff1f2', color:'#be123c'}}>
-                           <Ticket size={14}/> Ưu đãi
-                        </div>
-                        <h2 className={styles.titleMain} style={{fontSize: 24}}>MÃ GIẢM GIÁ <span className={styles.titleLight}>HOT</span></h2>
+                        <h2 className="home-title-main" style={{fontSize: 22}}>
+                            <Ticket color="#f43f5e" fill="#f43f5e" size={24}/> ƯU ĐÃI <span className="home-title-light">ĐỘC QUYỀN</span>
+                        </h2>
+                        <p className="home-subtitle">Săn mã giảm giá ngay hôm nay</p>
                     </div>
-                    <span onClick={() => handleNavigateProtected('/vouchers')} style={{fontSize: 14, color:'#f43f5e', cursor:'pointer', fontWeight: 600}}>Xem tất cả &rarr;</span>
+                    <span className="home-see-all" onClick={() => handleNavigateProtected('/vouchers')}>Xem tất cả</span>
                 </div>
-                
-                <div className={styles.voucherScroll}>
+                <div className="home-voucher-scroll">
                     {vouchers.map(v => (
-                        <div key={v.id} className={styles.voucherTicket}>
-                            <div className={styles.vLeft}>
-                                <span>{v.percent}%</span>
-                                <span style={{fontSize: 10, fontWeight: 400}}>GIẢM</span>
+                        <div key={v.id} className="home-voucher-ticket">
+                            <div className="v-left">
+                                <span style={{fontSize: 18, fontWeight: 800}}>{v.percent}%</span>
+                                <span style={{fontSize: 10}}>OFF</span>
                             </div>
-                            <div className={styles.vRight}>
-                                <div style={{fontWeight: 800, color: '#374151', fontSize: 14}}>{v.code}</div>
-                                <div style={{fontSize: 11, color: '#6b7280', margin: '2px 0 6px'}}>
-                                    {v.type === 'REWARD_ORDER' ? `Đơn từ ${v.conditionValue/1000}k` : `Giảm tối đa ${v.maxDiscount}k`}
+                            <div className="v-right">
+                                <div className="v-code">{v.code}</div>
+                                <div className="v-desc">
+                                    {v.type === 'REWARD_ORDER' ? `Đơn tối thiểu ${v.conditionValue/1000}k` : `Giảm tối đa ${v.maxDiscount/1000}k`}
                                 </div>
-                                <button className={styles.vBtnCopy} onClick={() => handleCopyVoucher(v.code)}>
-                                    {copiedCode === v.code ? <><Check size={12}/> Đã lưu</> : <><Copy size={12}/> Lưu mã</>}
+                                <button 
+                                    onClick={() => handleCopyVoucher(v.code)}
+                                    style={{background: copiedCode === v.code ? '#dcfce7' : '#fff1f2', color: copiedCode === v.code ? '#166534' : '#be123c', border: 'none', padding: '6px', borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: 'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap: 4}}
+                                >
+                                    {copiedCode === v.code ? <><Check size={12}/> ĐÃ LƯU</> : <><Copy size={12}/> LƯU MÃ</>}
                                 </button>
                             </div>
                         </div>
@@ -237,54 +262,88 @@ const Home = () => {
             </section>
         )}
 
-        {/* 5. RANDOM FOODS */}
-        <section className={styles.sectionContainer}>
-            <div className={styles.sectionTitleWrapper}>
+        {/* 6. DANH SÁCH MÓN ĂN */}
+        <section className="home-section-container">
+            <div className="home-title-wrapper">
                 <div>
-                   <h2 className={styles.titleMain}>MÓN NGON <span className={styles.titleLight}>ĐỀ XUẤT</span></h2>
-                   <p style={{color:'#6b7280', margin:'5px 0 0'}}>Dựa trên sở thích của bạn</p>
+                   <h2 className="home-title-main">GỢI Ý <span className="home-title-light">HÔM NAY</span></h2>
+                   <p className="home-subtitle">Khám phá các món ăn ngon xung quanh bạn</p>
                 </div>
             </div>
 
-            {loading ? <div style={{textAlign:'center'}}><Loader className="animate-spin" /></div> : (
-              <div className={styles.foodGrid}>
-                  {randomFoods.map(food => (
-                      <div key={food.id} className={styles.foodCard} onClick={() => navigate(`/restaurant/1`)}>
-                          <img 
-                             src={getImageUrl(food.image)} 
-                             onError={(e)=>{e.target.onerror=null; e.target.src="https://placehold.co/300x200?text=Món+Ngon"}}
-                             className={styles.foodImg} alt={food.name} 
-                          />
-                          <div className={styles.foodBody}>
-                              <div style={{marginBottom: 10}}>
-                                  <h4 className={styles.foodName}>{food.name}</h4>
-                                  <span style={{fontSize: 13, color: '#6b7280'}}>{food.restaurantName || "Nhà hàng đối tác"}</span>
-                              </div>
-                              <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:'auto', marginBottom: 12}}>
-                                  <span className={styles.foodPrice}>{formatPrice(food.price)}</span>
-                                  <div style={{display:'flex', gap: 2}}>
-                                      {[...Array(5)].map((_, i) => <Star key={i} size={12} fill="#fbbf24" color="#fbbf24"/>)}
-                                  </div>
-                              </div>
-                              <button className={styles.btnAdd} onClick={(e) => { e.stopPropagation(); handleOpenModal(food); }}>
-                                  <Plus size={18}/> Thêm
-                              </button>
-                          </div>
-                      </div>
-                  ))}
-              </div>
+            <div className="home-tabs">
+                <button className={`home-tab-btn ${activeTab === 'suggest' ? 'active' : ''}`} onClick={() => setActiveTab('suggest')}><Star size={16}/> Gợi ý</button>
+                <button className={`home-tab-btn ${activeTab === 'bestseller' ? 'active' : ''}`} onClick={() => setActiveTab('bestseller')}><Flame size={16}/> Bán chạy</button>
+                <button className={`home-tab-btn ${activeTab === 'near_me' ? 'active' : ''}`} onClick={() => setActiveTab('near_me')}><MapPin size={16}/> Gần tôi</button>
+                <button className="home-tab-btn" onClick={() => navigate('/search')}><Filter size={16}/> Bộ lọc khác</button>
+            </div>
+
+            {loading ? <div style={{textAlign:'center', padding: 40}}><Loader className="animate-spin" /></div> : (
+              <>
+                <div className="home-food-grid">
+                    {foods.map(food => (
+                        <div key={food.id} className="home-food-card" onClick={() => navigate(`/restaurant/1`)}>
+                            <div className="home-food-img-wrapper">
+                                <img src={getImageUrl(food.image)} onError={(e)=>{e.target.onerror=null; e.target.src="https://placehold.co/300x200?text=Món+Ngon"}} className="home-food-img" alt={food.name} />
+                                <div className="food-badge"><Clock size={12} color="#f59e0b"/> {food.time}p</div>
+                            </div>
+                            <div className="home-food-body">
+                                <h4 style={{fontSize: 16, fontWeight: 700, margin: '0 0 4px', color: '#1f2937'}}>{food.name}</h4>
+                                <span style={{fontSize: 13, color: '#6b7280'}}>{food.restaurantName || "Nhà hàng đối tác"}</span>
+                                <div className="food-meta">
+                                    <span className="food-meta-item"><Star size={12} fill="#fbbf24" color="#fbbf24"/> 4.8</span>
+                                    <span style={{color:'#d1d5db'}}>•</span>
+                                    <span className="food-meta-item"><MapPin size={12}/> {food.distance}km</span>
+                                </div>
+                                <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-end', marginTop:'auto'}}>
+                                    <span style={{fontSize: 16, fontWeight: 800, color: '#ef4444'}}>{formatPrice(food.price)}</span>
+                                </div>
+                                <button className="home-btn-add" onClick={(e) => { e.stopPropagation(); handleOpenModal(food); }}>
+                                    <Plus size={18}/> Thêm vào giỏ
+                                </button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+              </>
             )}
         </section>
 
-        {/* 6. RESTAURANT LIST */}
-        <section className={styles.sectionContainer} style={{background: '#fff', borderRadius: 30, padding: '40px 20px', boxShadow: '0 4px 20px rgba(0,0,0,0.03)'}}>
-            <div className={styles.sectionTitleWrapper}>
-               <h2 className={styles.titleMain}>NHÀ HÀNG <span className={styles.titleLight}>TIÊU BIỂU</span></h2>
+        {/* 7. REVIEW CỘNG ĐỒNG */}
+        <section className="home-section-container" style={{background: '#F0F9FF', borderRadius: 24, padding: '40px 24px'}}>
+            <div className="home-title-wrapper">
+                <h2 className="home-title-main" style={{color: '#0369a1'}}><MessageSquare size={24}/> REVIEW <span className="home-title-light" style={{color: '#7dd3fc'}}>CỘNG ĐỒNG</span></h2>
+            </div>
+            <div className="review-scroll">
+                {reviews.map(review => (
+                    <div key={review.id} className="review-card">
+                        <div className="review-header">
+                            <div className="review-avatar">{review.user.charAt(0)}</div>
+                            <div>
+                                <div style={{fontWeight: 700, fontSize: 14}}>{review.user}</div>
+                                <div style={{display:'flex', gap:2}}>{[...Array(5)].map((_,i) => <Star key={i} size={10} fill={i < review.rating ? "#fbbf24" : "#e5e7eb"} color={i < review.rating ? "#fbbf24" : "#e5e7eb"}/>)}</div>
+                            </div>
+                        </div>
+                        <div style={{fontSize: 12, fontWeight: 600, color: '#0369a1', marginBottom: 6}}>Món: {review.foodName}</div>
+                        <div className="review-content">"{review.content}"</div>
+                    </div>
+                ))}
+            </div>
+        </section>
+
+        {/* 8. NHÀ HÀNG TIÊU BIỂU */}
+        <section className="home-section-container">
+            <div className="home-title-wrapper">
+               <h2 className="home-title-main">NHÀ HÀNG <span className="home-title-light">NỔI BẬT</span></h2>
             </div>
             <RestaurantList />
         </section>
       </main>
 
+      {/* --- CHATBOT FLOATING --- */}
+      <Chatbot />
+
+      {/* --- FOOTER --- */}
       <Footer />
 
       {/* MODAL */}

@@ -1,345 +1,545 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useCart } from '../context/CartContext';
 import api from '../api/axios';
 import Header from '../components/Header';
-import { 
-  Banknote, CreditCard, CheckCircle, 
-  MapPin, ShoppingBag, XCircle, 
-  Ticket, Truck, ChevronRight, X, Trash2, Wallet
-} from 'lucide-react';
+// import Footer from '../components/Footer'; 
+import toast, { Toaster } from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
+import { 
+  Banknote, CreditCard, CheckCircle, MapPin, Ticket, 
+  ArrowLeft, Clock, ShieldCheck, Zap, Wallet, User, 
+  Phone, FileText, Loader, Home as HomeIcon, ChevronRight, Map, X, Search
+} from 'lucide-react';
+
+import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
+import L from 'leaflet';
+
+import icon from 'leaflet/dist/images/marker-icon.png';
+import iconShadow from 'leaflet/dist/images/marker-shadow.png';
+let DefaultIcon = L.icon({
+    iconUrl: icon,
+    shadowUrl: iconShadow,
+    iconSize: [25, 41],
+    iconAnchor: [12, 41],
+    popupAnchor: [1, -34],
+});
+L.Marker.prototype.options.icon = DefaultIcon;
+
+const MOCK_VOUCHERS = [
+    { id: 1, code: 'WELCOME', desc: 'Giảm 20k cho đơn 0đ', value: 20000, minOrder: 0 },
+    { id: 2, code: 'FREESHIP', desc: 'Giảm 15k phí vận chuyển', value: 15000, minOrder: 50000 },
+    { id: 3, code: 'FOODNEST50', desc: 'Giảm 50k cho đơn 200k', value: 50000, minOrder: 200000 },
+];
+
+const LocationMarker = ({ position, setPosition, setTempAddress, setIsFetchingAddress }) => {
+    const map = useMapEvents({
+        click: async (e) => {
+            const { lat, lng } = e.latlng;
+            setPosition(e.latlng);
+            setIsFetchingAddress(true);
+            setTempAddress("Đang tìm tên đường...");
+            
+            try {
+                const response = await fetch(
+                    `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&accept-language=vi`
+                );
+                const data = await response.json();
+                
+                if (data && data.display_name) {
+                    const shortAddress = data.display_name.split(',').slice(0, 5).join(',');
+                    setTempAddress(shortAddress);
+                } else {
+                    setTempAddress(`Tọa độ: ${lat.toFixed(5)}, ${lng.toFixed(5)}`);
+                }
+            } catch (error) {
+                console.error("Lỗi lấy địa chỉ:", error);
+                setTempAddress("Không thể lấy tên đường, vui lòng nhập tay.");
+            } finally {
+                setIsFetchingAddress(false);
+            }
+        },
+    });
+
+    useEffect(() => {
+        if (position) {
+            map.flyTo(position, map.getZoom());
+        }
+    }, [position, map]);
+
+    return position === null ? null : (
+        <Marker position={position}>
+            <Popup>Vị trí bạn chọn</Popup>
+        </Marker>
+    );
+};
 
 const Order = () => {
   const { cartItems, totalPrice, clearCart } = useCart();
   const navigate = useNavigate();
+  
   const [loading, setLoading] = useState(false);
   
-  // Dùng useMemo để tránh user bị reset khi render lại
-  const user = useMemo(() => JSON.parse(localStorage.getItem('user')), []);
+  // --- 👇 ĐÃ FIX: Logic tìm tên thông minh hơn 👇 ---
+  const [customerInfo, setCustomerInfo] = useState(() => {
+      try {
+          const stored = localStorage.getItem('user');
+          if (!stored) return { phone: '', address: '', name: '' };
 
-  const [customerInfo, setCustomerInfo] = useState({ 
-    phone: user?.phone || '', 
-    address: user?.address || '' 
+          const parsedData = JSON.parse(stored);
+          // Fix trường hợp dữ liệu bị lồng trong key 'user'
+          const realUser = parsedData.user || parsedData;
+
+          console.log("Order Page - User Info:", realUser); // Check log xem có fullName không
+
+          return { 
+            phone: realUser.phone || '', 
+            address: realUser.address || '',
+            // Tìm tên theo thứ tự ưu tiên
+            name: realUser.fullName || realUser.name || realUser.username || ''
+          };
+      } catch (e) {
+          return { phone: '', address: '', name: '' };
+      }
   });
+  // ---------------------------------------------------
   
   const [paymentMethod, setPaymentMethod] = useState('CASH');
+  const [deliveryTime, setDeliveryTime] = useState('NOW');
   const [note, setNote] = useState('');
   
   const [voucherCode, setVoucherCode] = useState('');
-  const [discount, setDiscount] = useState(0);
-  const [myVouchers, setMyVouchers] = useState([]);
+  const [appliedVoucher, setAppliedVoucher] = useState(null); 
+  const [discountAmount, setDiscountAmount] = useState(0);
   const [showVoucherModal, setShowVoucherModal] = useState(false);
-  
-  const [showQRModal, setShowQRModal] = useState(false);
+
+  const [showMapModal, setShowMapModal] = useState(false);
+  const [mapPosition, setMapPosition] = useState({ lat: 10.762622, lng: 106.660172 });
+  const [tempAddress, setTempAddress] = useState("");
+  const [isFetchingAddress, setIsFetchingAddress] = useState(false);
+
   const [qrImage, setQrImage] = useState('');
+  const [showQRModal, setShowQRModal] = useState(false);
 
-  const SHIP_FEE = 15000; 
-  const BANK_ID = "MB"; 
-  const ACCOUNT_NO = "0333333333"; 
-  const ACCOUNT_NAME = "NGUYEN VAN A"; 
+  const SHIP_FEE = 15000;
+  const finalTotal = Math.max(0, totalPrice + SHIP_FEE - discountAmount);
 
-  // --- 1. ĐỊNH NGHĨA 3 PHƯƠNG THỨC THANH TOÁN ---
-  const paymentOptions = [
-    { 
-        id: 'CASH', 
-        title: 'Tiền mặt (COD)', 
-        icon: <Banknote size={24}/>, 
-        desc: 'Thanh toán khi nhận hàng' 
-    },
-    { 
-        id: 'BANK', 
-        title: 'Chuyển khoản QR', 
-        icon: <CreditCard size={24}/>, 
-        desc: 'Quét mã tự động qua App Ngân hàng' 
-    },
-    { 
-        id: 'VNPAY', 
-        title: 'Ví VNPAY / Momo', 
-        icon: <Wallet size={24}/>, 
-        desc: 'Thanh toán qua cổng điện tử' 
-    },
-  ];
-
-  useEffect(() => {
-    if(user) {
-        setMyVouchers([
-            {id: 1, code: 'WELCOME', percent: 20, maxDiscount: 20000},
-            {id: 2, code: 'FREESHIP', percent: 100, maxDiscount: 15000},
-        ]);
-    }
-  }, [user]); 
-
-  const applyVoucher = (v) => {
-      const rawDiscount = (totalPrice * v.percent) / 100;
-      const finalDiscount = Math.min(rawDiscount, v.maxDiscount);
-      setVoucherCode(v.code);
-      setDiscount(finalDiscount);
-      setShowVoucherModal(false);
-  };
-
-  const handleManualApply = () => {
-      if (voucherCode.toUpperCase() === 'FREESHIP') {
-          setDiscount(SHIP_FEE);
-          alert("Áp dụng mã FreeShip thành công!");
-      } else {
-          const found = myVouchers.find(v => v.code === voucherCode);
-          if (found) applyVoucher(found);
-          else {
-              alert("Mã không hợp lệ!");
-              setDiscount(0);
-          }
-      }
-  };
-
-  const finalTotal = totalPrice + SHIP_FEE - discount;
-
-  const validatePhone = (phone) => {
-      const re = /(84|0[3|5|7|8|9])+([0-9]{8})\b/g;
-      return re.test(phone);
-  };
-
-  // --- HÀM ĐẶT HÀNG ---
-  const handleCheckout = async () => {
-    if (!user) return alert("Vui lòng đăng nhập!");
-    if (!validatePhone(customerInfo.phone)) return alert("Số điện thoại không đúng định dạng!");
-    if (!customerInfo.address) return alert("Vui lòng nhập địa chỉ!");
-    if (cartItems.length === 0) return alert("Giỏ hàng trống!");
-
+  const handleApplyVoucher = (codeInput = voucherCode) => {
+    const codeToCheck = typeof codeInput === 'string' ? codeInput : voucherCode;
+    
+    if (!codeToCheck.trim()) return toast.error("Vui lòng nhập hoặc chọn mã!");
     setLoading(true);
+    
+    setTimeout(() => {
+        const foundVoucher = MOCK_VOUCHERS.find(v => v.code === codeToCheck.toUpperCase());
+
+        if (foundVoucher) {
+            if (totalPrice < foundVoucher.minOrder) {
+                toast.error(`Đơn hàng cần tối thiểu ${new Intl.NumberFormat('vi-VN').format(foundVoucher.minOrder)}đ`);
+                setAppliedVoucher(null);
+                setDiscountAmount(0);
+            } else {
+                setDiscountAmount(foundVoucher.value);
+                setAppliedVoucher(foundVoucher);
+                setVoucherCode(foundVoucher.code);
+                toast.success("Áp dụng mã thành công!");
+                setShowVoucherModal(false);
+            }
+        } else {
+            toast.error("Mã không hợp lệ!");
+            setAppliedVoucher(null);
+            setDiscountAmount(0);
+        }
+        setLoading(false);
+    }, 500);
+  };
+
+  const handleSelectVoucher = (voucher) => {
+      setVoucherCode(voucher.code);
+      handleApplyVoucher(voucher.code);
+  };
+
+  const handleOpenMap = () => {
+      setTempAddress(customerInfo.address || "Chưa chọn vị trí");
+      setShowMapModal(true);
+  };
+
+  const handleConfirmLocation = () => {
+      if (!tempAddress || tempAddress === "Đang tìm tên đường...") {
+          return toast.error("Vui lòng đợi lấy tên đường hoặc chọn vị trí khác!");
+      }
+      setCustomerInfo({...customerInfo, address: tempAddress});
+      setShowMapModal(false);
+      toast.success("Đã cập nhật vị trí giao hàng!");
+  };
+
+  const handleCheckout = async () => {
+    const stored = localStorage.getItem('user');
+    if (!stored) return toast.error("Vui lòng đăng nhập để đặt hàng!");
+    
+    const parsedData = JSON.parse(stored);
+    const user = parsedData.user || parsedData; // Lấy ID chuẩn
+
+    if (!customerInfo.address || !customerInfo.phone) return toast.error("Vui lòng điền địa chỉ và SĐT!");
+    if (!customerInfo.name) return toast.error("Vui lòng điền tên người nhận!");
+    
+    const loadId = toast.loading("Đang xử lý đơn hàng...");
+    setLoading(true);
+
     try {
       const orderData = {
         userId: user.id,
-        customerName: user.fullName || user.username,
+        customerName: customerInfo.name,
         phone: customerInfo.phone,
         address: customerInfo.address,
         totalAmount: finalTotal, 
-        paymentMethod: paymentMethod, 
-        note: note,
-        voucherCode: voucherCode || null,
-        items: cartItems.map(item => ({ 
-          foodId: item.id, 
-          quantity: item.quantity, 
-          price: item.price
-        }))
+        paymentMethod, 
+        note,
+        deliveryTime,
+        voucherCode: appliedVoucher?.code || null,
+        items: cartItems.map(item => ({ foodId: item.id, quantity: item.quantity, price: item.price }))
       };
 
       const res = await api.post('/orders', orderData);
-      const newOrderId = res.data.id || Date.now();
+      const newOrderId = res.data.id || Date.now(); 
 
-      // --- 2. XỬ LÝ LOGIC RIÊNG CHO TỪNG LOẠI ---
-      
       if (paymentMethod === 'BANK') {
-          // LOGIC QR: Phải hiện Modal và KHÔNG ĐƯỢC chuyển trang ngay
-          const content = `THANHTOAN DON ${newOrderId}`;
-          const qrLink = `https://img.vietqr.io/image/${BANK_ID}-${ACCOUNT_NO}-compact.jpg?amount=${finalTotal}&addInfo=${content}&accountName=${ACCOUNT_NAME}`;
-          
-          setQrImage(qrLink);
-          setShowQRModal(true); // Bật Modal QR lên
-          clearCart(); // Xóa giỏ hàng nhưng vẫn ở lại trang này
-          
-          // LƯU Ý: Không navigate() ở đây, để khách quét mã xong tự bấm nút
-
-      } else if (paymentMethod === 'VNPAY') {
-          // LOGIC VÍ: Chuyển hướng sang trang thanh toán
-          alert("Hệ thống đang chuyển hướng sang cổng thanh toán VNPAY...");
-          clearCart();
-          navigate('/history');
-
+          const content = `ORDER${newOrderId}`;
+          setQrImage(`https://img.vietqr.io/image/MB-0333333333-compact.jpg?amount=${finalTotal}&addInfo=${content}&accountName=FOODNEST`);
+          setShowQRModal(true);
+          toast.success("Đơn hàng đã tạo! Vui lòng thanh toán.", { id: loadId });
       } else {
-          // LOGIC TIỀN MẶT: Xong luôn
-          alert("Đặt hàng thành công!");
+          toast.success("Đặt hàng thành công!", { id: loadId });
           clearCart();
           navigate('/history');
       }
-
     } catch (err) {
-      console.error("Order Error:", err);
-      
-      // Fix lỗi lệch pha
-      if (err.response && (err.response.status === 400 || err.response.status === 500)) {
-          alert("⚠️ Dữ liệu thực đơn đã thay đổi. Hệ thống sẽ tự động làm mới để bạn chọn lại.");
-          clearCart(); 
-          window.location.href = '/'; 
-      } else {
-          alert("Lỗi: " + (err.response?.data?.message || err.response?.data || "Vui lòng thử lại sau"));
-      }
-    } finally {
-      setLoading(false);
+      console.error(err);
+      toast.error("Có lỗi xảy ra, vui lòng thử lại!", { id: loadId });
+    } finally { 
+        setLoading(false); 
     }
   };
 
-  const formatPrice = (p) => new Intl.NumberFormat('vi-VN').format(p) + 'đ';
+  const formatPrice = (p) => new Intl.NumberFormat('vi-VN').format(p) + '₫';
 
-  const handleEmergencyReset = () => {
-      if(window.confirm("Bạn chắc chắn muốn xóa toàn bộ giỏ hàng?")) {
-          clearCart();
-          window.location.href = '/'; 
-      }
-  }
+  const paymentOptions = [
+    { id: 'CASH', title: 'Tiền mặt (COD)', icon: <Banknote size={24}/>, sub: 'Thanh toán khi nhận hàng' },
+    { id: 'BANK', title: 'Chuyển khoản QR', icon: <CreditCard size={24}/>, sub: 'Quét mã VietQR nhanh chóng' },
+    { id: 'WALLET', title: 'Ví điện tử', icon: <Wallet size={24}/>, sub: 'Momo / ZaloPay / VNPAY' },
+  ];
 
   return (
-    <>
-    <Header />
-    <div className="checkout-container">
+    <div className="order-page">
+      <Toaster position="top-center" />
+      <Header />
+      
       <style>{`
-        .checkout-container { max-width: 1100px; margin: 40px auto; padding: 0 20px; font-family: 'Inter', sans-serif; }
-        .checkout-grid { display: grid; grid-template-columns: 1fr; gap: 30px; }
-        @media (min-width: 1024px) { .checkout-grid { grid-template-columns: 1.8fr 1.2fr; } }
-
-        .card-box { background: white; border: 1px solid #e5e7eb; border-radius: 20px; padding: 24px; margin-bottom: 24px; position: relative; }
-        .card-title { font-size: 18px; font-weight: 800; margin-bottom: 20px; display: flex; align-items: center; gap: 10px; }
-
-        .input-field, .textarea-field { width: 100%; padding: 12px; border: 1.5px solid #e5e7eb; border-radius: 10px; margin-bottom: 15px; outline: none; }
-        .input-field:focus, .textarea-field:focus { border-color: #ef4444; }
-        .textarea-field { resize: vertical; min-height: 80px; }
-
-        .method-item { display: flex; align-items: center; padding: 16px; border: 2px solid #f3f4f6; border-radius: 15px; cursor: pointer; transition: 0.2s; margin-bottom: 10px;}
-        .method-item.active { border-color: #ef4444; background: #fef2f2; }
-        .method-icon { width: 45px; height: 45px; border-radius: 12px; background: #f3f4f6; display: flex; align-items: center; justify-content: center; margin-right: 15px; }
-        
-        .item-row { display: flex; gap: 12px; align-items: center; margin-bottom: 15px; }
-        .item-img { width: 50px; height: 50px; border-radius: 8px; object-fit: cover; }
-
-        .btn-order { width: 100%; background: #111827; color: white; border: none; padding: 16px; border-radius: 12px; font-weight: 800; cursor: pointer; margin-bottom: 10px; }
-        .btn-order:disabled { opacity: 0.7; cursor: not-allowed; }
-        
-        .btn-cancel { width: 100%; background: white; color: #ef4444; border: 1.5px solid #ef4444; padding: 14px; border-radius: 12px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; }
-        
-        /* Nút Reset màu đỏ nhạt */
-        .btn-reset { width: 100%; background: #fee2e2; color: #991b1b; border: none; padding: 10px; border-radius: 10px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 10px; font-size: 13px; transition: 0.2s; }
-        .btn-reset:hover { background: #fecaca; }
-
-        .voucher-input-group { display: flex; gap: 10px; margin-bottom: 20px; }
-        .btn-apply { background: #ef4444; color: white; border: none; padding: 0 20px; border-radius: 10px; font-weight: 600; cursor: pointer; white-space: nowrap; }
-        .select-voucher-btn { display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 12px; border: 1px dashed #ef4444; background: #fff1f2; color: #ef4444; border-radius: 10px; font-weight: 600; cursor: pointer; margin-bottom: 15px; }
-        
-        .summary-row { display: flex; justify-content: space-between; margin-bottom: 10px; color: #4b5563; font-size: 14px; }
-        .summary-total { display: flex; justify-content: space-between; font-size: 18px; fontWeight: 900; color: #111827; margin-top: 15px; padding-top: 15px; border-top: 1px dashed #e5e7eb; }
-
-        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 100; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
-        .modal-content { background: white; width: 90%; max-width: 400px; border-radius: 16px; padding: 20px; max-height: 80vh; overflow-y: auto; animation: popIn 0.3s ease; }
-        .v-item { border: 1px solid #e5e7eb; padding: 12px; border-radius: 10px; margin-bottom: 10px; cursor: pointer; transition: 0.2s; display: flex; justify-content: space-between; align-items: center; }
-        .v-item.active { border-color: #ef4444; background: #fef2f2; }
-        .qr-container { text-align: center; margin: 15px 0; }
-        .qr-img { width: 100%; max-width: 250px; border-radius: 10px; border: 1px solid #e5e7eb; }
-        @keyframes popIn { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        .order-page { background-color: #F3F4F6; min-height: 100vh; font-family: 'Inter', sans-serif; color: #1f2937; padding-bottom: 50px; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 30px 20px; }
+        .order-grid { display: grid; grid-template-columns: 1.8fr 1.2fr; gap: 24px; }
+        @media (max-width: 960px) { .order-grid { grid-template-columns: 1fr; } }
+        .card-box { background: white; border-radius: 16px; padding: 24px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); border: 1px solid #e5e7eb; margin-bottom: 20px; }
+        .section-title { font-size: 18px; font-weight: 700; margin-bottom: 20px; display: flex; align-items: center; gap: 10px; color: #111827; }
+        .section-icon { color: #ef4444; }
+        .input-group { margin-bottom: 16px; }
+        .input-label { display: block; font-size: 13px; font-weight: 600; color: #4b5563; margin-bottom: 6px; }
+        .input-wrapper { position: relative; display: flex; align-items: center; }
+        .input-field { width: 100%; padding: 12px 16px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; transition: 0.2s; background: #f9fafb; outline: none; box-sizing: border-box; }
+        .input-field:focus { border-color: #ef4444; background: white; box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1); }
+        .input-btn-right { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: #fff; border: 1px solid #e5e7eb; padding: 6px 10px; border-radius: 6px; font-size: 12px; font-weight: 600; color: #4b5563; cursor: pointer; display: flex; align-items: center; gap: 4px; }
+        .input-btn-right:hover { background: #f3f4f6; color: #ef4444; border-color: #ef4444; }
+        .time-toggle { display: flex; gap: 12px; margin-bottom: 20px; }
+        .time-btn { flex: 1; padding: 12px; border: 1px solid #e5e7eb; border-radius: 8px; background: white; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; font-weight: 600; color: #4b5563; transition: 0.2s; }
+        .time-btn.active { border-color: #ef4444; background: #fef2f2; color: #ef4444; }
+        .payment-option { display: flex; align-items: center; padding: 16px; border: 1px solid #e5e7eb; border-radius: 12px; margin-bottom: 12px; cursor: pointer; transition: 0.2s; }
+        .payment-option:hover { background: #f9fafb; }
+        .payment-option.active { border-color: #ef4444; background: #fef2f2; box-shadow: 0 2px 5px rgba(239, 68, 68, 0.1); }
+        .radio-circle { width: 20px; height: 20px; border-radius: 50%; border: 2px solid #d1d5db; margin-right: 16px; position: relative; flex-shrink: 0; }
+        .payment-option.active .radio-circle { border-color: #ef4444; }
+        .payment-option.active .radio-circle::after { content: ''; position: absolute; width: 10px; height: 10px; background: #ef4444; border-radius: 50%; top: 50%; left: 50%; transform: translate(-50%, -50%); }
+        .cart-item-row { display: flex; gap: 12px; margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px dashed #e5e7eb; }
+        .item-thumb { width: 60px; height: 60px; border-radius: 8px; object-fit: cover; background: #f3f4f6; flex-shrink: 0; }
+        .voucher-box { display: flex; gap: 10px; margin-bottom: 20px; align-items: stretch; }
+        .voucher-input-wrapper { position: relative; flex: 1; min-width: 0; }
+        .btn-apply { background: #1f2937; color: white; padding: 0 20px; border-radius: 8px; font-weight: 600; font-size: 13px; cursor: pointer; border: none; white-space: nowrap; flex-shrink: 0; }
+        .btn-apply:hover { background: #374151; }
+        .bill-row { display: flex; justify-content: space-between; font-size: 14px; color: #6b7280; margin-bottom: 10px; }
+        .bill-total { display: flex; justify-content: space-between; font-size: 18px; font-weight: 800; color: #111827; margin-top: 16px; padding-top: 16px; border-top: 1px solid #e5e7eb; }
+        .btn-checkout { width: 100%; background: #ef4444; color: white; border: none; padding: 16px; border-radius: 12px; font-weight: 700; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 20px; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3); transition: 0.2s; }
+        .btn-checkout:hover { background: #dc2626; transform: translateY(-2px); }
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 2000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px); animation: fadeIn 0.3s; }
+        .modal-content { background: white; padding: 24px; border-radius: 20px; max-width: 450px; width: 90%; position: relative; animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1); display: flex; flex-direction: column; max-height: 85vh; }
+        .modal-close { position: absolute; top: 16px; right: 16px; background: #f3f4f6; border: none; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+        .voucher-list { overflow-y: auto; padding-right: 4px; margin-top: 10px; }
+        .voucher-item { border: 1px solid #e5e7eb; padding: 12px; border-radius: 12px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: 0.2s; }
+        .voucher-item:hover { border-color: #ef4444; background: #fef2f2; }
+        .voucher-tag { background: #fee2e2; color: #ef4444; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; margin-bottom: 4px; display: inline-block; }
+        .map-wrapper { height: 350px; width: 100%; margin-bottom: 16px; border-radius: 12px; overflow: hidden; border: 1px solid #e5e7eb; position: relative; }
+        .leaflet-container { height: 100%; width: 100%; }
+        .map-address-box { position: absolute; bottom: 10px; left: 10px; right: 10px; z-index: 1000; background: white; padding: 12px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); display: flex; flex-direction: column; gap: 4px; }
+        .map-address-label { font-size: 11px; color: #6b7280; font-weight: 700; text-transform: uppercase; }
+        .map-address-text { font-size: 13px; font-weight: 600; color: #1f2937; line-height: 1.4; }
+        .btn-done { width: 100%; background: #10b981; color: white; border: none; padding: 14px; border-radius: 12px; font-weight: 700; cursor: pointer; transition: 0.2s; }
+        .btn-done:hover { background: #059669; }
+        @keyframes fadeIn { from {opacity:0} to {opacity:1} }
+        @keyframes slideUp { from {transform: translateY(20px); opacity: 0} to {transform: translateY(0); opacity: 1} }
       `}</style>
 
-      <div className="checkout-grid">
-        <div className="info-side">
-          {/* Form thông tin */}
-          <div className="card-box">
-            <h3 className="card-title"><MapPin size={22} color="#ef4444"/> 1. Thông tin giao hàng</h3>
-            <label style={{display:'block', marginBottom:5, fontWeight:600, fontSize:13}}>Số điện thoại</label>
-            <input className="input-field" value={customerInfo.phone} onChange={e => setCustomerInfo({...customerInfo, phone: e.target.value})} placeholder="VD: 0901234567" />
-            <label style={{display:'block', marginBottom:5, fontWeight:600, fontSize:13}}>Địa chỉ nhận hàng</label>
-            <input className="input-field" value={customerInfo.address} onChange={e => setCustomerInfo({...customerInfo, address: e.target.value})} placeholder="Số nhà, tên đường, phường..." />
-            <label style={{display:'block', marginBottom:5, fontWeight:600, fontSize:13}}>Ghi chú</label>
-            <textarea className="textarea-field" placeholder="Ghi chú cho tài xế..." value={note} onChange={e => setNote(e.target.value)} />
-          </div>
-
-          {/* Chọn thanh toán */}
-          <div className="card-box">
-            <h3 className="card-title"><CreditCard size={22} color="#ef4444"/> 2. Phương thức thanh toán</h3>
-            {/* Lặp qua 3 phương thức thanh toán */}
-            {paymentOptions.map(opt => (
-              <div key={opt.id} className={`method-item ${paymentMethod === opt.id ? 'active' : ''}`} onClick={() => setPaymentMethod(opt.id)}>
-                <div className="method-icon">{opt.icon}</div>
-                <div style={{flex: 1}}>
-                  <div style={{fontWeight: 700}}>{opt.title}</div>
-                  <div style={{fontSize: 12, color: '#6b7280'}}>{opt.desc}</div>
-                </div>
-                {paymentMethod === opt.id && <CheckCircle size={20} color="#ef4444" />}
-              </div>
-            ))}
-          </div>
+      <div className="container">
+        <div style={{ marginBottom: 20, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', color: '#6b7280' }} onClick={() => navigate(-1)}>
+            <ArrowLeft size={18}/> Quay lại mua sắm
         </div>
 
-        <div className="summary-side">
-          <div className="card-box" style={{position: 'sticky', top: '100px'}}>
-            <h3 className="card-title"><ShoppingBag size={22} color="#ef4444"/> Đơn hàng</h3>
-            
-            <div style={{maxHeight: '200px', overflowY: 'auto', marginBottom: 20}}>
-              {cartItems.map(item => (
-                <div key={item.cartItemId} className="item-row">
-                  <img src={item.image || 'https://via.placeholder.com/50'} className="item-img" alt={item.name} />
-                  <div style={{flex: 1}}>
-                    <div style={{fontSize: 14, fontWeight: 700}}>{item.name}</div>
-                    <div style={{fontSize: 12, color: '#6b7280'}}>SL: {item.quantity}</div>
-                  </div>
-                  <div style={{fontWeight: 700, fontSize: 14}}>{formatPrice(item.price * item.quantity)}</div>
-                </div>
-              ))}
-            </div>
-
-            <button className="select-voucher-btn" onClick={() => setShowVoucherModal(true)}>
-                <span><Ticket size={16} style={{marginRight: 6}}/> {voucherCode ? `Mã: ${voucherCode}` : `Chọn Voucher`}</span>
-                <ChevronRight size={16}/>
-            </button>
-            <div className="voucher-input-group">
-                <input className="input-field" style={{marginBottom:0}} placeholder="Nhập mã" value={voucherCode} onChange={(e) => setVoucherCode(e.target.value)} />
-                <button className="btn-apply" onClick={handleManualApply}>Áp dụng</button>
-            </div>
-
-            <div style={{background: '#f9fafb', padding: 15, borderRadius: 12}}>
-                <div className="summary-row"><span>Tạm tính</span><span>{formatPrice(totalPrice)}</span></div>
-                <div className="summary-row"><span><Truck size={14}/> Phí ship</span><span>{formatPrice(SHIP_FEE)}</span></div>
-                {discount > 0 && (
-                    <div className="summary-row" style={{color: '#10b981'}}>
-                        <span>Giảm giá</span><span>-{formatPrice(discount)}</span>
+        <div className="order-grid">
+            {/* CỘT TRÁI: THÔNG TIN */}
+            <div>
+                <div className="card-box">
+                    <div className="section-title">
+                        <MapPin className="section-icon"/> Thông tin giao hàng
                     </div>
-                )}
-                <div className="summary-total"><span>Tổng cộng</span><span style={{color:'#ef4444', fontSize: 20}}>{formatPrice(finalTotal)}</span></div>
+                    
+                    <div className="time-toggle">
+                        <div className={`time-btn ${deliveryTime === 'NOW' ? 'active' : ''}`} onClick={() => setDeliveryTime('NOW')}>
+                            <Zap size={16}/> Giao ngay
+                        </div>
+                        <div className={`time-btn ${deliveryTime === 'LATER' ? 'active' : ''}`} onClick={() => setDeliveryTime('LATER')}>
+                            <Clock size={16}/> Hẹn giờ
+                        </div>
+                    </div>
+
+                    <div className="input-group">
+                        <label className="input-label"><User size={14} style={{display:'inline', marginBottom:-2}}/> Người nhận</label>
+                        <input 
+                            className="input-field" 
+                            value={customerInfo.name} 
+                            onChange={e => setCustomerInfo({...customerInfo, name: e.target.value})}
+                            placeholder="Tên người nhận"
+                        />
+                    </div>
+                    
+                    <div className="input-group">
+                        <label className="input-label"><Phone size={14} style={{display:'inline', marginBottom:-2}}/> Số điện thoại</label>
+                        <input 
+                            className="input-field" 
+                            value={customerInfo.phone} 
+                            onChange={e => setCustomerInfo({...customerInfo, phone: e.target.value})}
+                            placeholder="Nhập SĐT..."
+                        />
+                    </div>
+
+                    <div className="input-group">
+                        <label className="input-label"><HomeIcon size={14} style={{display:'inline', marginBottom:-2}}/> Địa chỉ giao hàng</label>
+                        <div className="input-wrapper">
+                            <input 
+                                className="input-field" 
+                                value={customerInfo.address} 
+                                onChange={e => setCustomerInfo({...customerInfo, address: e.target.value})}
+                                placeholder="Vui lòng chọn trên bản đồ..."
+                                style={{paddingRight: 110}}
+                            />
+                            <button className="input-btn-right" onClick={handleOpenMap}>
+                                <Map size={14} /> Chọn bản đồ
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="input-group">
+                        <label className="input-label"><FileText size={14} style={{display:'inline', marginBottom:-2}}/> Ghi chú</label>
+                        <textarea 
+                            className="input-field" rows="2"
+                            value={note} 
+                            onChange={e => setNote(e.target.value)}
+                            placeholder="Ví dụ: Không hành, nhiều ớt..."
+                        ></textarea>
+                    </div>
+                </div>
+
+                <div className="card-box">
+                    <div className="section-title">
+                        <CreditCard className="section-icon"/> Phương thức thanh toán
+                    </div>
+                    <div>
+                        {paymentOptions.map(opt => (
+                            <div key={opt.id} className={`payment-option ${paymentMethod === opt.id ? 'active' : ''}`} onClick={() => setPaymentMethod(opt.id)}>
+                                <div className="radio-circle"></div>
+                                <div style={{marginRight: 16, color: paymentMethod === opt.id ? '#ef4444' : '#6b7280'}}>
+                                    {opt.icon}
+                                </div>
+                                <div>
+                                    <div style={{fontWeight: 600, fontSize: 15}}>{opt.title}</div>
+                                    <div style={{fontSize: 12, color: '#9ca3af'}}>{opt.sub}</div>
+                                </div>
+                                {paymentMethod === opt.id && <CheckCircle size={20} color="#ef4444" style={{marginLeft:'auto'}}/>}
+                            </div>
+                        ))}
+                    </div>
+                </div>
             </div>
 
-            <div style={{margin: '20px 0'}}>
-                <button className="btn-order" onClick={handleCheckout} disabled={loading}>{loading ? "ĐANG XỬ LÝ..." : "ĐẶT HÀNG NGAY"}</button>
-                <button className="btn-cancel" onClick={() => navigate('/')}><XCircle size={18}/> HỦY BỎ</button>
-                
-                <button className="btn-reset" onClick={handleEmergencyReset}>
-                    <Trash2 size={16}/> Làm mới giỏ hàng (Nếu bị lỗi)
-                </button>
+            {/* CỘT PHẢI: TỔNG KẾT ĐƠN */}
+            <div>
+                <div className="card-box" style={{position: 'sticky', top: 20}}>
+                    <div className="section-title" style={{justifyContent:'space-between'}}>
+                        <span>Đơn hàng ({cartItems.length} món)</span>
+                        <span style={{fontSize: 13, color: '#ef4444', fontWeight: 500, cursor: 'pointer'}} onClick={() => navigate('/')}>Thêm món</span>
+                    </div>
+
+                    <div style={{maxHeight: 300, overflowY: 'auto', marginBottom: 20}} className="custom-scroll">
+                        {cartItems.map((item, idx) => (
+                            <div key={idx} className="cart-item-row">
+                                <img src={item.image || "https://placehold.co/100"} className="item-thumb" alt={item.name}/>
+                                <div style={{flex: 1}}>
+                                    <div style={{fontWeight: 600, fontSize: 14, marginBottom: 4}}>{item.name}</div>
+                                    <div style={{fontSize: 12, color: '#6b7280'}}>x{item.quantity} {item.options?.size && `• ${item.options.size}`}</div>
+                                </div>
+                                <div style={{fontWeight: 600, fontSize: 14}}>{formatPrice(item.price * item.quantity)}</div>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Ô NHẬP VOUCHER */}
+                    <div className="voucher-box">
+                          <div className="voucher-input-wrapper">
+                             <Ticket size={16} style={{position:'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color:'#9ca3af', zIndex: 1}}/>
+                             <input 
+                                className="input-field" 
+                                style={{paddingLeft: 38, paddingRight: 80}}
+                                placeholder="Mã giảm giá"
+                                value={voucherCode}
+                                onChange={e => setVoucherCode(e.target.value)}
+                             />
+                             <span 
+                                style={{position:'absolute', right: 12, top:'50%', transform:'translateY(-50%)', fontSize: 12, color:'#ef4444', fontWeight:600, cursor:'pointer'}}
+                                onClick={() => setShowVoucherModal(true)}
+                             >
+                                 Chọn mã
+                             </span>
+                          </div>
+                          <button className="btn-apply" onClick={() => handleApplyVoucher()} disabled={loading}>
+                            {loading ? '...' : 'Áp dụng'}
+                          </button>
+                    </div>
+
+                    {appliedVoucher && (
+                        <div style={{background:'#ecfdf5', color:'#059669', padding: '8px 12px', borderRadius: 8, fontSize: 12, marginBottom: 16, display:'flex', justifyContent:'space-between'}}>
+                            <span><CheckCircle size={12} style={{display:'inline'}}/> {appliedVoucher.desc}</span>
+                            <span style={{fontWeight:700}}>-{formatPrice(discountAmount)}</span>
+                        </div>
+                    )}
+
+                    <div>
+                        <div className="bill-row"><span>Tạm tính</span> <span>{formatPrice(totalPrice)}</span></div>
+                        <div className="bill-row"><span>Phí giao hàng</span> <span>{formatPrice(SHIP_FEE)}</span></div>
+                        {discountAmount > 0 && <div className="bill-row" style={{color:'#10b981'}}><span>Khuyến mãi</span> <span>-{formatPrice(discountAmount)}</span></div>}
+                        <div className="bill-total">
+                            <span>Tổng thanh toán</span>
+                            <span style={{color: '#ef4444', fontSize: 22}}>{formatPrice(finalTotal)}</span>
+                        </div>
+                    </div>
+
+                    <button className="btn-checkout" onClick={handleCheckout} disabled={loading || cartItems.length === 0}>
+                        {loading ? <Loader className="animate-spin" /> : 'ĐẶT HÀNG NGAY'}
+                    </button>
+                    
+                    <div style={{display:'flex', justifyContent:'center', gap: 6, fontSize: 11, color: '#9ca3af', marginTop: 12}}>
+                        <ShieldCheck size={14}/> Thông tin thanh toán được bảo mật 100%
+                    </div>
+                </div>
             </div>
-          </div>
         </div>
       </div>
 
-      {/* MODAL VOUCHER */}
+      {/* MODALS GIỮ NGUYÊN */}
       {showVoucherModal && (
-        <div className="modal-overlay" onClick={() => setShowVoucherModal(false)}>
-            <div className="modal-content" onClick={e => e.stopPropagation()}>
-                <div style={{display:'flex', justifyContent:'space-between', marginBottom:15}}>
-                    <h3 style={{fontSize:18, fontWeight:700}}>Chọn Voucher</h3>
-                    <X style={{cursor:'pointer'}} onClick={() => setShowVoucherModal(false)}/>
-                </div>
-                {myVouchers.map(v => (
-                    <div key={v.id} className={`v-item ${voucherCode === v.code ? 'active' : ''}`} onClick={() => applyVoucher(v)}>
-                        <div><strong style={{color:'#ef4444'}}>{v.code}</strong> - Giảm {v.percent}%</div>
-                        {voucherCode === v.code && <CheckCircle size={20} color="#ef4444"/>}
-                    </div>
-                ))}
-            </div>
-        </div>
+          <div className="modal-overlay" onClick={() => setShowVoucherModal(false)}>
+              <div className="modal-content" onClick={e => e.stopPropagation()}>
+                  <button className="modal-close" onClick={() => setShowVoucherModal(false)}><X size={18}/></button>
+                  <h3 style={{fontSize: 20, fontWeight: 700, marginBottom: 16}}>Chọn Voucher</h3>
+                  <div className="voucher-list custom-scroll" style={{maxHeight: 400}}>
+                      {MOCK_VOUCHERS.map(v => (
+                          <div key={v.id} className="voucher-item" onClick={() => handleSelectVoucher(v)}>
+                              <div>
+                                  <span className="voucher-tag">{v.code}</span>
+                                  <div style={{fontSize: 14, fontWeight: 600}}>{v.desc}</div>
+                                  <div style={{fontSize: 12, color: '#6b7280'}}>HSD: 31/12/2024</div>
+                              </div>
+                              <div style={{width: 20, height: 20, borderRadius:'50%', border:'2px solid #ddd', display:'flex', alignItems:'center', justifyContent:'center'}}>
+                                  {voucherCode === v.code && <div style={{width: 10, height: 10, background:'#ef4444', borderRadius:'50%'}}></div>}
+                              </div>
+                          </div>
+                      ))}
+                  </div>
+              </div>
+          </div>
       )}
 
-      {/* MODAL QR CODE: CHỈ HIỆN KHI CHỌN BANK */}
+      {showMapModal && (
+          <div className="modal-overlay" onClick={() => setShowMapModal(false)}>
+              <div className="modal-content" style={{maxWidth: 600}} onClick={e => e.stopPropagation()}>
+                  <button className="modal-close" onClick={() => setShowMapModal(false)}><X size={18}/></button>
+                  <h3 style={{fontSize: 20, fontWeight: 700, marginBottom: 8}}>Chọn vị trí</h3>
+                  <p style={{fontSize: 13, color:'#6b7280', marginBottom: 16}}>Click vào bản đồ để lấy chính xác tên đường</p>
+                  
+                  <div className="map-wrapper">
+                      <MapContainer center={[mapPosition.lat, mapPosition.lng]} zoom={15} scrollWheelZoom={true}>
+                          <TileLayer
+                              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
+                              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                          />
+                          <LocationMarker 
+                            position={mapPosition}
+                            setPosition={setMapPosition} 
+                            setTempAddress={setTempAddress}
+                            setIsFetchingAddress={setIsFetchingAddress}
+                           />
+                      </MapContainer>
+                      <div className="map-address-box">
+                          <span className="map-address-label">Địa điểm đã chọn:</span>
+                          <span className="map-address-text">
+                            {isFetchingAddress ? (
+                                <span style={{display:'flex', alignItems:'center', gap:6, color:'#ef4444'}}>
+                                    <Loader size={14} className="animate-spin"/> Đang lấy tên đường...
+                                </span>
+                            ) : (
+                                tempAddress || "Vui lòng click vào bản đồ"
+                            )}
+                          </span>
+                      </div>
+                  </div>
+
+                  <button className="btn-checkout" style={{marginTop: 0, padding: 12}} onClick={handleConfirmLocation}>
+                      Xác nhận vị trí này
+                  </button>
+              </div>
+          </div>
+      )}
+
       {showQRModal && (
-        <div className="modal-overlay">
-            <div className="modal-content" style={{textAlign:'center'}}>
-                <div style={{color:'#10b981', marginBottom:10}}><CheckCircle size={40} style={{margin:'0 auto'}}/></div>
-                <h3 style={{fontSize:20, fontWeight:800}}>Đặt hàng thành công!</h3>
-                <p style={{color:'#6b7280', fontSize:14}}>Quét mã để thanh toán:</p>
-                <div className="qr-container"><img src={qrImage} className="qr-img" alt="QR Code" /></div>
-                <div style={{background:'#f3f4f6', padding:10, borderRadius:8, fontSize:13, marginBottom:20}}>
-                    <b>{formatPrice(finalTotal)}</b> <br/> Nội dung: Giữ nguyên
-                </div>
-                {/* NÚT XÁC NHẬN ĐÃ THANH TOÁN */}
-                <button className="btn-order" onClick={() => navigate('/history')}>ĐÃ CHUYỂN KHOẢN</button>
-            </div>
-        </div>
+          <div className="modal-overlay">
+              <div className="modal-content" style={{textAlign:'center'}}>
+                  <div style={{background:'#d1fae5', width: 60, height: 60, borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 16px'}}>
+                      <CheckCircle size={32} color="#059669"/>
+                  </div>
+                  <h3 style={{fontSize: 20, fontWeight: 800, margin: '0 0 8px'}}>THANH TOÁN QR</h3>
+                  <p style={{color:'#6b7280', fontSize: 14, marginBottom: 20}}>Quét mã bên dưới để hoàn tất đơn hàng</p>
+                  
+                  <div style={{padding: 10, border: '1px solid #e5e7eb', borderRadius: 16, display:'inline-block', marginBottom: 20}}>
+                      <img src={qrImage} alt="VietQR" style={{width: 220, height: 220, objectFit:'contain'}}/>
+                  </div>
+                  
+                  <div style={{background:'#f3f4f6', padding: 12, borderRadius: 12, marginBottom: 20}}>
+                      <div style={{fontSize: 12, color:'#6b7280', textTransform:'uppercase', fontWeight: 700}}>Số tiền cần chuyển</div>
+                      <div style={{fontSize: 24, fontWeight: 900, color:'#ef4444'}}>{formatPrice(finalTotal)}</div>
+                  </div>
+
+                  <button className="btn-done" onClick={() => { clearCart(); navigate('/history'); }}>
+                      TÔI ĐÃ CHUYỂN KHOẢN
+                  </button>
+              </div>
+          </div>
       )}
     </div>
-    </>
   );
 };
 

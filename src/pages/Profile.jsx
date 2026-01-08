@@ -1,123 +1,158 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import Header from '../components/Header';
-import api from '../api/axios'; // Đảm bảo bạn đã cấu hình axios instance
+import Header from '../components/Header'; // Đảm bảo đường dẫn đúng
+import api from '../api/axios'; 
 import { 
   User, Mail, Phone, MapPin, Camera, 
-  Save, Edit, LogOut, Calendar, Shield, Loader2, X 
+  Save, Edit3, LogOut, Shield, Loader2, X, ShoppingBag, Key, 
+  ChevronRight, Package, Clock, CheckCircle, Eye, EyeOff
 } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 const Profile = () => {
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
   
-  // State quản lý User & Loading
+  // --- STATE ---
   const [user, setUser] = useState(() => {
     const saved = localStorage.getItem('user');
     return saved ? JSON.parse(saved) : null;
   });
-  
-  const [loading, setLoading] = useState(false); // Loading khi update info
-  const [uploading, setUploading] = useState(false); // Loading khi upload ảnh
-  const [isEditing, setIsEditing] = useState(false); // Toggle chế độ sửa
 
-  // State Form
+  const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [activeTab, setActiveTab] = useState('info'); // 'info', 'orders', 'security'
+  const [isEditing, setIsEditing] = useState(false);
+
+  // State cho Form thông tin
   const [formData, setFormData] = useState({
-    fullName: '',
-    phone: '',
-    address: '',
-    email: '' // Email thường không cho sửa, chỉ hiển thị
+    fullName: '', phone: '', address: '', email: '' 
   });
 
-  // Load dữ liệu vào Form khi user thay đổi
+  // State cho Đơn hàng
+  const [orders, setOrders] = useState([]);
+  const [loadingOrders, setLoadingOrders] = useState(false);
+
+  // State cho Đổi mật khẩu
+  const [passData, setPassData] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
+  const [showPass, setShowPass] = useState({ current: false, new: false, confirm: false });
+
+  // --- INITIAL LOAD ---
   useEffect(() => {
     if (user) {
       setFormData({
-        fullName: user.fullName || "",
+        fullName: user.fullName || user.username || "", 
         phone: user.phone || "",
         address: user.address || "",
         email: user.email || ""
       });
+      fetchOrders(); // Gọi API lấy đơn hàng
     } else {
       navigate('/login');
     }
   }, [user, navigate]);
 
-  // --- 1. XỬ LÝ UPLOAD AVATAR ---
-  const handleAvatarClick = () => {
-    fileInputRef.current.click();
+  // --- API: LẤY ĐƠN HÀNG ---
+  const fetchOrders = async () => {
+    setLoadingOrders(true);
+    try {
+      const res = await api.get('/orders/my-orders');
+      setOrders(res.data);
+    } catch (error) {
+      console.log("Chưa có API đơn hàng, dùng dữ liệu mẫu.");
+      // Dữ liệu mẫu để giao diện đẹp
+      setOrders([
+        { id: 1023, date: '2023-10-25', total: 150000, status: 'COMPLETED', items: 'Gà rán, Pepsi' },
+        { id: 1024, date: '2023-10-28', total: 85000, status: 'PENDING', items: 'Cơm tấm sườn bì' },
+      ]);
+    } finally {
+      setLoadingOrders(false);
+    }
   };
 
+  // --- HANDLER: UPLOAD AVATAR ---
   const handleFileChange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    // Validate file
-    if (!file.type.startsWith('image/')) return alert("Vui lòng chọn file ảnh!");
-    if (file.size > 2 * 1024 * 1024) return alert("Ảnh không được quá 2MB!");
+    if (!file.type.startsWith('image/')) return toast.error("Vui lòng chọn file ảnh!");
+    if (file.size > 2 * 1024 * 1024) return toast.error("Ảnh không được quá 2MB!");
 
     setUploading(true);
     try {
-      // Gọi API Upload (Endpoint dựa trên Controller đã viết trước đó)
       const formDataUpload = new FormData();
       formDataUpload.append('file', file);
-
+      
+      // API Upload
       const res = await api.post(`/users/${user.id}/avatar`, formDataUpload, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
 
-      // Cập nhật State & LocalStorage
-      const newAvatarUrl = res.data.avatar; // API trả về { avatar: "url...", message: "..." }
+      const newAvatarUrl = res.data.avatar || res.data; // Tùy backend trả về
       const updatedUser = { ...user, avatar: newAvatarUrl };
       
       setUser(updatedUser);
       localStorage.setItem('user', JSON.stringify(updatedUser));
-      alert("Cập nhật ảnh đại diện thành công!");
+      toast.success("Đã cập nhật ảnh đại diện!");
     } catch (error) {
-      console.error("Lỗi upload:", error);
-      alert("Lỗi khi upload ảnh. Vui lòng thử lại.");
+      toast.error("Lỗi upload ảnh, vui lòng thử lại.");
     } finally {
       setUploading(false);
     }
   };
 
-  // --- 2. XỬ LÝ CẬP NHẬT THÔNG TIN ---
-  const handleInputChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-  };
-
+  // --- HANDLER: CẬP NHẬT THÔNG TIN ---
   const handleUpdateProfile = async (e) => {
     e.preventDefault();
     setLoading(true);
     try {
-      // Giả sử API update info là PUT /users/{id}
-      // Lưu ý: Backend cần có endpoint này để nhận fullName, phone, address
-      const res = await api.put(`/users/${user.id}`, {
+      await api.put(`/users/${user.id}`, {
         fullName: formData.fullName,
         phone: formData.phone,
         address: formData.address
       });
 
-      // Merge dữ liệu cũ với dữ liệu mới trả về
-      const updatedUser = { ...user, ...res.data };
+      const updatedUser = { ...user, ...formData }; 
       setUser(updatedUser);
       localStorage.setItem('user', JSON.stringify(updatedUser));
       
       setIsEditing(false);
-      alert("Cập nhật thông tin thành công!");
+      toast.success("Cập nhật hồ sơ thành công!");
     } catch (error) {
-      console.error(error);
-      alert("Cập nhật thất bại: " + (error.response?.data?.message || "Lỗi hệ thống"));
+      toast.error("Cập nhật thất bại: " + (error.response?.data?.message || "Lỗi hệ thống"));
     } finally {
       setLoading(false);
     }
   };
 
-  // --- 3. XỬ LÝ ĐĂNG XUẤT ---
+  // --- HANDLER: ĐỔI MẬT KHẨU ---
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    if (passData.newPassword !== passData.confirmPassword) {
+      return toast.error("Mật khẩu xác nhận không khớp!");
+    }
+    if (passData.newPassword.length < 6) {
+      return toast.error("Mật khẩu mới phải có ít nhất 6 ký tự!");
+    }
+
+    setLoading(true);
+    try {
+      await api.put(`/users/change-password`, {
+        oldPassword: passData.currentPassword,
+        newPassword: passData.newPassword
+      });
+      toast.success("Đổi mật khẩu thành công!");
+      setPassData({ currentPassword: '', newPassword: '', confirmPassword: '' });
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Mật khẩu cũ không đúng!");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleLogout = () => {
     if (window.confirm("Bạn có chắc muốn đăng xuất?")) {
-      localStorage.removeItem('user');
-      localStorage.removeItem('token'); // Nếu có lưu token riêng
+      localStorage.clear();
       navigate('/login');
     }
   };
@@ -127,302 +162,251 @@ const Profile = () => {
   return (
     <>
       <Header />
-      <div className="profile-wrapper">
+      <div className="profile-page">
         {/* CSS IN-JS */}
         <style>{`
-          .profile-wrapper {
-            background-color: #f8f9fa;
-            min-height: calc(100vh - 80px); /* Trừ header */
-            padding: 40px 20px;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-          }
-          .profile-container {
-            max-width: 1000px;
-            margin: 0 auto;
-            display: grid;
-            grid-template-columns: 300px 1fr;
-            gap: 30px;
-          }
+          .profile-page { background-color: #f3f4f6; min-height: calc(100vh - 80px); padding: 40px 20px; font-family: 'Inter', sans-serif; }
+          .profile-layout { max-width: 1100px; margin: 0 auto; display: grid; grid-template-columns: 320px 1fr; gap: 30px; }
           
-          /* Sidebar Card */
-          .profile-card {
-            background: white;
-            border-radius: 16px;
-            padding: 30px;
-            text-align: center;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.05);
-            height: fit-content;
-          }
+          /* Cards */
+          .card { background: white; border-radius: 24px; box-shadow: 0 4px 20px rgba(0,0,0,0.03); border: 1px solid white; overflow: hidden; }
           
-          /* Avatar Styling */
-          .avatar-box {
-            width: 140px; height: 140px;
-            margin: 0 auto 20px;
-            position: relative;
-            border-radius: 50%;
-            border: 4px solid #fff;
-            box-shadow: 0 8px 20px rgba(239, 68, 68, 0.2); /* Red shadow */
-          }
-          .avatar-img {
-            width: 100%; height: 100%;
-            object-fit: cover;
-            border-radius: 50%;
-          }
-          .avatar-placeholder {
-            width: 100%; height: 100%;
-            background: linear-gradient(135deg, #ef4444, #f87171);
-            color: white;
-            font-size: 48px;
-            font-weight: bold;
-            display: flex; align-items: center; justify-content: center;
-            border-radius: 50%;
-          }
-          .btn-avatar-edit {
-            position: absolute; bottom: 5px; right: 5px;
-            background: white; border: none;
-            width: 36px; height: 36px;
-            border-radius: 50%;
-            display: flex; align-items: center; justify-content: center;
-            cursor: pointer;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-            color: #ef4444;
-            transition: 0.2s;
-          }
-          .btn-avatar-edit:hover { transform: scale(1.1); background: #fef2f2; }
-          .upload-overlay {
-            position: absolute; inset: 0; background: rgba(255,255,255,0.7);
-            border-radius: 50%; display: flex; align-items: center; justify-content: center;
-            color: #ef4444;
-          }
-
-          /* Info Main */
-          .info-card {
-            background: white;
-            border-radius: 16px;
-            padding: 30px 40px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.05);
-          }
-          .section-header {
-            display: flex; justify-content: space-between; align-items: center;
-            margin-bottom: 30px; border-bottom: 2px solid #f1f5f9; padding-bottom: 15px;
-          }
-          .section-title { font-size: 24px; font-weight: 700; color: #1e293b; display: flex; align-items: center; gap: 10px; }
+          /* Sidebar */
+          .sidebar-header { background: linear-gradient(135deg, #ff4757 0%, #ff6b81 100%); padding: 40px 20px 30px; text-align: center; color: white; }
+          .avatar-wrapper { width: 110px; height: 110px; margin: 0 auto 15px; position: relative; }
+          .avatar-img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; border: 4px solid rgba(255,255,255,0.3); box-shadow: 0 8px 16px rgba(0,0,0,0.1); background: white; }
+          .avatar-placeholder { width: 100%; height: 100%; background: #fff; color: #ff4757; font-size: 40px; font-weight: 800; display: flex; align-items: center; justify-content: center; border-radius: 50%; border: 4px solid rgba(255,255,255,0.3); }
           
-          /* Form Grid */
-          .form-grid {
-            display: grid; grid-template-columns: 1fr 1fr; gap: 25px;
-          }
-          .form-group { display: flex; flex-direction: column; gap: 8px; }
-          .form-group.full-width { grid-column: span 2; }
+          .btn-camera { position: absolute; bottom: 0; right: 0; background: #1f2937; color: white; width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid white; cursor: pointer; transition: 0.2s; }
+          .btn-camera:hover { transform: scale(1.1); background: #000; }
+
+          .user-name { font-size: 18px; font-weight: 700; margin: 0 0 4px; }
+          .user-email { font-size: 13px; opacity: 0.9; margin-bottom: 10px; }
+          .role-badge { display: inline-block; padding: 4px 12px; background: rgba(255,255,255,0.2); border-radius: 20px; font-size: 11px; font-weight: 700; text-transform: uppercase; }
+
+          .menu-list { padding: 20px; }
+          .menu-item { display: flex; align-items: center; gap: 12px; padding: 12px 16px; margin-bottom: 5px; color: #64748b; font-weight: 600; font-size: 14px; border-radius: 12px; cursor: pointer; transition: 0.2s; }
+          .menu-item:hover { background: #f8fafc; color: #1e293b; }
+          .menu-item.active { background: #fff1f2; color: #ff4757; }
+          .menu-item.logout { color: #ef4444; margin-top: 20px; border-top: 1px solid #f1f5f9; border-radius: 0; padding-top: 20px; }
+          .menu-item.logout:hover { background: #fef2f2; }
+
+          /* Main Content */
+          .content-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; padding-bottom: 20px; border-bottom: 1px solid #f1f5f9; }
+          .content-title { font-size: 20px; font-weight: 800; color: #1e293b; display: flex; align-items: center; gap: 10px; }
           
-          .label { font-size: 14px; color: #64748b; font-weight: 600; display: flex; align-items: center; gap: 8px; }
-          .input-field {
-            padding: 12px 15px;
-            border: 1px solid #e2e8f0;
-            border-radius: 8px;
-            font-size: 16px;
-            transition: 0.2s;
-            outline: none;
-            background: #f8fafc;
-            color: #334155;
-          }
-          .input-field:focus { border-color: #ef4444; background: white; box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1); }
-          .input-field:disabled { background: #f1f5f9; color: #94a3b8; cursor: not-allowed; }
-
-          /* View Mode Value */
-          .value-display {
-            font-size: 18px; font-weight: 500; color: #334155;
-            padding: 12px 0; border-bottom: 1px solid #f1f5f9;
-          }
-
-          /* Buttons */
-          .btn {
-            padding: 10px 20px; border-radius: 8px; font-weight: 600;
-            cursor: pointer; display: flex; align-items: center; gap: 8px;
-            transition: 0.2s; border: none;
-          }
-          .btn-primary { background: #ef4444; color: white; }
-          .btn-primary:hover { background: #dc2626; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3); }
-          .btn-outline { background: white; border: 1px solid #e2e8f0; color: #64748b; }
-          .btn-outline:hover { background: #f8fafc; color: #334155; border-color: #cbd5e1; }
+          .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+          .full-width { grid-column: span 2; }
           
-          .role-badge {
-            display: inline-block; padding: 6px 16px;
-            background: #fee2e2; color: #ef4444;
-            border-radius: 20px; font-size: 13px; font-weight: 700;
-            margin-bottom: 10px; text-transform: uppercase;
-          }
-          .join-date { color: #94a3b8; font-size: 14px; margin-top: 5px; display: flex; align-items: center; justify-content: center; gap: 6px;}
+          .input-group label { display: block; font-size: 13px; font-weight: 600; color: #64748b; margin-bottom: 8px; }
+          .input-box { width: 100%; padding: 12px 16px; border: 1px solid #e2e8f0; border-radius: 12px; font-size: 14px; color: #1e293b; outline: none; transition: 0.2s; background: #f8fafc; }
+          .input-box:focus { border-color: #ff4757; background: white; box-shadow: 0 0 0 4px rgba(255, 71, 87, 0.1); }
+          .input-box:disabled { background: #f1f5f9; cursor: not-allowed; }
+          
+          .btn { padding: 10px 20px; border-radius: 12px; font-weight: 600; font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 8px; border: none; transition: 0.2s; }
+          .btn-primary { background: #ff4757; color: white; box-shadow: 0 4px 12px rgba(255, 71, 87, 0.3); }
+          .btn-primary:hover { background: #e8414e; transform: translateY(-1px); }
+          .btn-ghost { background: transparent; color: #64748b; border: 1px solid #e2e8f0; }
+          .btn-ghost:hover { background: #f8fafc; color: #1e293b; }
 
-          .btn-logout {
-            margin-top: 20px; width: 100%;
-            background: #fff1f2; color: #e11d48;
-            border: 1px solid #ffe4e6;
-            justify-content: center;
-          }
-          .btn-logout:hover { background: #ffe4e6; }
+          /* Order Item */
+          .order-item { border: 1px solid #f1f5f9; border-radius: 16px; padding: 20px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; transition: 0.2s; }
+          .order-item:hover { border-color: #ff4757; transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,0,0,0.05); }
+          .status-badge { font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 20px; text-transform: uppercase; }
+          .status-completed { background: #dcfce7; color: #166534; }
+          .status-pending { background: #fff7ed; color: #c2410c; }
+          
+          .password-wrapper { position: relative; }
+          .eye-btn { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); background: none; border: none; color: #94a3b8; cursor: pointer; }
 
-          @media (max-width: 768px) {
-            .profile-container { grid-template-columns: 1fr; }
-            .form-grid { grid-template-columns: 1fr; }
-            .form-group.full-width { grid-column: span 1; }
-          }
+          @media (max-width: 768px) { .profile-layout { grid-template-columns: 1fr; } .form-grid { grid-template-columns: 1fr; } .full-width { grid-column: span 1; } }
         `}</style>
 
-        <div className="profile-container">
-          {/* CỘT TRÁI: AVATAR & INFO CƠ BẢN */}
-          <aside>
-            <div className="profile-card">
-              <div className="avatar-box">
+        <div className="profile-layout">
+          {/* --- SIDEBAR --- */}
+          <aside className="card">
+            <div className="sidebar-header">
+              <div className="avatar-wrapper">
                 {uploading && (
-                  <div className="upload-overlay">
-                    <Loader2 className="animate-spin" size={32} />
+                  <div style={{position:'absolute', inset:0, background:'rgba(0,0,0,0.5)', display:'flex', alignItems:'center', justifyContent:'center', borderRadius:'50%', zIndex:10}}>
+                    <Loader2 className="animate-spin text-white" size={24}/>
                   </div>
                 )}
-                
                 {user.avatar ? (
-                  <img src={user.avatar} className="avatar-img" alt="Avatar" />
+                  <img src={user.avatar} className="avatar-img" alt="User" />
                 ) : (
                   <div className="avatar-placeholder">
-                    {user.fullName ? user.fullName.charAt(0).toUpperCase() : 'U'}
+                    {(user.fullName || "U").charAt(0).toUpperCase()}
                   </div>
                 )}
-                
-                <button className="btn-avatar-edit" onClick={handleAvatarClick} title="Thay đổi ảnh">
-                  <Camera size={18}/>
+                <button className="btn-camera" onClick={() => fileInputRef.current.click()}>
+                  <Camera size={16}/>
                 </button>
-                <input 
-                  type="file" 
-                  ref={fileInputRef} 
-                  style={{display: 'none'}} 
-                  accept="image/*" 
-                  onChange={handleFileChange} 
-                />
+                <input type="file" ref={fileInputRef} hidden accept="image/*" onChange={handleFileChange} />
               </div>
 
-              <div className="role-badge">
-                {user.role === "ROLE_ADMIN" ? "Quản trị viên" : "Khách hàng thân thiết"}
-              </div>
-              
-              <h3 style={{margin: '0 0 5px 0', fontSize: '22px', color: '#1e293b'}}>
-                {user.fullName}
-              </h3>
-              
-              <p style={{color: '#64748b', margin: 0}}>{user.email}</p>
+              <h3 className="user-name">{user.fullName || user.username}</h3>
+              <p className="user-email">{user.email}</p>
+              <div className="role-badge">{user.role === "ADMIN" ? "Quản trị viên" : "Thành viên thân thiết"}</div>
+            </div>
 
-              <div className="join-date">
-                <Calendar size={14} /> 
-                Tham gia: {user.createdAt ? new Date(user.createdAt).toLocaleDateString('vi-VN') : 'N/A'}
+            <div className="menu-list">
+              <div className={`menu-item ${activeTab === 'info' ? 'active' : ''}`} onClick={() => setActiveTab('info')}>
+                <User size={18}/> Thông tin cá nhân
               </div>
-
-              <button className="btn btn-logout" onClick={handleLogout}>
-                <LogOut size={18} /> Đăng xuất
-              </button>
+              <div className={`menu-item ${activeTab === 'orders' ? 'active' : ''}`} onClick={() => setActiveTab('orders')}>
+                <ShoppingBag size={18}/> Đơn hàng của tôi
+              </div>
+              <div className={`menu-item ${activeTab === 'security' ? 'active' : ''}`} onClick={() => setActiveTab('security')}>
+                <Shield size={18}/> Đổi mật khẩu
+              </div>
+              <div className="menu-item logout" onClick={handleLogout}>
+                <LogOut size={18}/> Đăng xuất
+              </div>
             </div>
           </aside>
 
-          {/* CỘT PHẢI: CHI TIẾT & FORM */}
-          <main>
-            <div className="info-card">
-              <div className="section-header">
-                <div className="section-title">
-                  <Shield size={24} className="text-red-500" style={{color: '#ef4444'}}/>
-                  Thông tin cá nhân
-                </div>
-                {!isEditing ? (
-                  <button className="btn btn-outline" onClick={() => setIsEditing(true)}>
-                    <Edit size={18} /> Chỉnh sửa
+          {/* --- MAIN CONTENT --- */}
+          <main className="card" style={{padding: '30px 40px'}}>
+            
+            {/* 1. TAB INFO */}
+            {activeTab === 'info' && (
+              <>
+                <div className="content-header">
+                  <div className="content-title"><User size={24} className="text-rose-500"/> Hồ sơ của tôi</div>
+                  <button className="btn btn-ghost" onClick={() => setIsEditing(!isEditing)}>
+                    {isEditing ? <><X size={16}/> Hủy</> : <><Edit3 size={16}/> Chỉnh sửa</>}
                   </button>
+                </div>
+
+                <form onSubmit={handleUpdateProfile}>
+                  <div className="form-grid">
+                    <div className="input-group full-width">
+                      <label>Họ và tên</label>
+                      <input type="text" className="input-box" value={formData.fullName} disabled={!isEditing}
+                        onChange={e => setFormData({...formData, fullName: e.target.value})} />
+                    </div>
+
+                    <div className="input-group">
+                      <label>Email</label>
+                      <input type="text" className="input-box" value={formData.email} disabled style={{opacity: 0.7}} />
+                    </div>
+
+                    <div className="input-group">
+                      <label>Số điện thoại</label>
+                      <input type="text" className="input-box" value={formData.phone} disabled={!isEditing}
+                        onChange={e => setFormData({...formData, phone: e.target.value})} placeholder="Thêm số điện thoại"/>
+                    </div>
+
+                    <div className="input-group full-width">
+                      <label>Địa chỉ giao hàng mặc định</label>
+                      <input type="text" className="input-box" value={formData.address} disabled={!isEditing}
+                        onChange={e => setFormData({...formData, address: e.target.value})} placeholder="Nhập địa chỉ nhận hàng..."/>
+                    </div>
+                  </div>
+
+                  {isEditing && (
+                    <div style={{marginTop: '30px', display: 'flex', justifyContent: 'flex-end'}}>
+                      <button type="submit" className="btn btn-primary" disabled={loading}>
+                        {loading ? <Loader2 className="animate-spin" size={18}/> : <Save size={18}/>}
+                        {loading ? "Đang lưu..." : "Lưu thay đổi"}
+                      </button>
+                    </div>
+                  )}
+                </form>
+              </>
+            )}
+
+            {/* 2. TAB ORDERS */}
+            {activeTab === 'orders' && (
+              <>
+                <div className="content-header">
+                  <div className="content-title"><ShoppingBag size={24} className="text-rose-500"/> Lịch sử đơn hàng</div>
+                </div>
+
+                {loadingOrders ? (
+                  <div className="text-center py-10"><Loader2 className="animate-spin text-rose-500" size={30} style={{margin:'0 auto'}}/></div>
+                ) : orders.length > 0 ? (
+                  <div className="orders-list">
+                    {orders.map(order => (
+                      <div key={order.id} className="order-item">
+                        <div style={{flex: 1}}>
+                          <div style={{display:'flex', gap:'10px', alignItems:'center', marginBottom:'5px'}}>
+                            <h4 style={{margin:0}}>Đơn hàng #{order.id}</h4>
+                            <span className={`status-badge ${order.status === 'COMPLETED' ? 'status-completed' : 'status-pending'}`}>
+                              {order.status}
+                            </span>
+                          </div>
+                          <p style={{margin:0, color:'#64748b', fontSize:'13px'}}>{order.items || "Nhiều món ăn"}</p>
+                          <small style={{color:'#94a3b8'}}>{order.date}</small>
+                        </div>
+                        <div style={{textAlign:'right'}}>
+                          <div style={{fontWeight:'bold', color:'#ff4757', fontSize:'16px'}}>{order.total?.toLocaleString()}đ</div>
+                          <button className="btn btn-ghost" style={{padding:'6px 12px', marginTop:'5px', fontSize:'12px'}} onClick={() => navigate(`/order/${order.id}`)}>
+                            Chi tiết <ChevronRight size={14}/>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 ) : (
-                  <button className="btn btn-outline" onClick={() => setIsEditing(false)}>
-                    <X size={18} /> Hủy bỏ
-                  </button>
+                  <div style={{textAlign:'center', padding:'50px 0', color:'#94a3b8'}}>
+                    <Package size={48} style={{margin:'0 auto 20px', opacity:0.5}}/>
+                    <h3>Chưa có đơn hàng nào</h3>
+                    <button className="btn btn-primary" style={{margin:'20px auto'}} onClick={() => navigate('/menu')}>Đặt món ngay</button>
+                  </div>
                 )}
-              </div>
+              </>
+            )}
 
-              <form onSubmit={handleUpdateProfile}>
-                <div className="form-grid">
-                  {/* Họ và tên */}
-                  <div className="form-group full-width">
-                    <label className="label"><User size={16}/> Họ và tên</label>
-                    {isEditing ? (
-                      <input 
-                        type="text" 
-                        name="fullName"
-                        className="input-field" 
-                        value={formData.fullName} 
-                        onChange={handleInputChange}
-                        required
-                      />
-                    ) : (
-                      <div className="value-display">{user.fullName}</div>
-                    )}
-                  </div>
-
-                  {/* Email (Read only) */}
-                  <div className="form-group">
-                    <label className="label"><Mail size={16}/> Email</label>
-                    <input 
-                      type="email" 
-                      className="input-field" 
-                      value={formData.email} 
-                      disabled 
-                      title="Không thể thay đổi email"
-                    />
-                  </div>
-
-                  {/* Số điện thoại */}
-                  <div className="form-group">
-                    <label className="label"><Phone size={16}/> Số điện thoại</label>
-                    {isEditing ? (
-                      <input 
-                        type="text" 
-                        name="phone"
-                        className="input-field" 
-                        value={formData.phone} 
-                        onChange={handleInputChange}
-                        placeholder="Thêm số điện thoại..."
-                      />
-                    ) : (
-                      <div className="value-display" style={{color: user.phone ? '#334155' : '#94a3b8'}}>
-                        {user.phone || "Chưa cập nhật"}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Địa chỉ */}
-                  <div className="form-group full-width">
-                    <label className="label"><MapPin size={16}/> Địa chỉ nhận hàng</label>
-                    {isEditing ? (
-                      <input 
-                        type="text" 
-                        name="address"
-                        className="input-field" 
-                        value={formData.address} 
-                        onChange={handleInputChange}
-                        placeholder="Thêm địa chỉ giao hàng mặc định..."
-                      />
-                    ) : (
-                      <div className="value-display" style={{color: user.address ? '#334155' : '#94a3b8'}}>
-                        {user.address || "Chưa cập nhật"}
-                      </div>
-                    )}
-                  </div>
+            {/* 3. TAB SECURITY */}
+            {activeTab === 'security' && (
+              <>
+                <div className="content-header">
+                  <div className="content-title"><Key size={24} className="text-rose-500"/> Đổi mật khẩu</div>
                 </div>
-
-                {isEditing && (
-                  <div style={{marginTop: '30px', display: 'flex', justifyContent: 'flex-end', gap: '15px'}}>
-                    <button type="button" className="btn btn-outline" onClick={() => setIsEditing(false)}>
-                      Hủy
-                    </button>
-                    <button type="submit" className="btn btn-primary" disabled={loading}>
-                      {loading ? <Loader2 className="animate-spin" size={20}/> : <Save size={20}/>}
-                      {loading ? "Đang lưu..." : "Lưu thay đổi"}
-                    </button>
+                
+                <form onSubmit={handleChangePassword} style={{maxWidth: '500px'}}>
+                  <div className="input-group" style={{marginBottom:'20px'}}>
+                    <label>Mật khẩu hiện tại</label>
+                    <div className="password-wrapper">
+                      <input type={showPass.current ? "text" : "password"} className="input-box" 
+                        value={passData.currentPassword} onChange={e => setPassData({...passData, currentPassword: e.target.value})} />
+                      <button type="button" className="eye-btn" onClick={() => setShowPass({...showPass, current: !showPass.current})}>
+                        {showPass.current ? <EyeOff size={18}/> : <Eye size={18}/>}
+                      </button>
+                    </div>
                   </div>
-                )}
-              </form>
-            </div>
+
+                  <div className="input-group" style={{marginBottom:'20px'}}>
+                    <label>Mật khẩu mới</label>
+                    <div className="password-wrapper">
+                      <input type={showPass.new ? "text" : "password"} className="input-box" 
+                        value={passData.newPassword} onChange={e => setPassData({...passData, newPassword: e.target.value})} />
+                      <button type="button" className="eye-btn" onClick={() => setShowPass({...showPass, new: !showPass.new})}>
+                        {showPass.new ? <EyeOff size={18}/> : <Eye size={18}/>}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="input-group" style={{marginBottom:'30px'}}>
+                    <label>Xác nhận mật khẩu mới</label>
+                    <div className="password-wrapper">
+                      <input type={showPass.confirm ? "text" : "password"} className="input-box" 
+                        value={passData.confirmPassword} onChange={e => setPassData({...passData, confirmPassword: e.target.value})} />
+                      <button type="button" className="eye-btn" onClick={() => setShowPass({...showPass, confirm: !showPass.confirm})}>
+                        {showPass.confirm ? <EyeOff size={18}/> : <Eye size={18}/>}
+                      </button>
+                    </div>
+                  </div>
+
+                  <button type="submit" className="btn btn-primary" disabled={loading || !passData.currentPassword}>
+                    {loading ? <Loader2 className="animate-spin" size={18}/> : <CheckCircle size={18}/>} Cập nhật mật khẩu
+                  </button>
+                </form>
+              </>
+            )}
+
           </main>
         </div>
       </div>

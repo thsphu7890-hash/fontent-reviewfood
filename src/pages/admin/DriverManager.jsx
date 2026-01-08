@@ -1,177 +1,151 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import api from '../../api/axios';
-import { Search, Lock, Unlock, Phone, Mail, User, ShieldCheck, ShieldAlert } from 'lucide-react';
+import { toast } from 'react-hot-toast'; // Đảm bảo đã import
+import { 
+  Phone, Mail, CheckCircle, XCircle, Search, 
+  ShieldCheck, Bike, Lock, Loader2, User
+} from 'lucide-react';
 
 const DriverManager = () => {
   const [drivers, setDrivers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
 
-  // 1. Lấy danh sách tài xế khi vào trang
-  useEffect(() => {
-    fetchDrivers();
-  }, []);
-
+  // 1. CALL API (Đã sửa URL khớp với Backend)
   const fetchDrivers = async () => {
     try {
-      // ✅ ĐÃ SỬA: Xóa chữ /api ở đầu để tránh bị lặp (thành /api/api/...)
-      const res = await api.get('/users/drivers'); 
-      setDrivers(res.data);
+      setLoading(true);
+      const res = await api.get('/driver/all'); 
+      setDrivers(Array.isArray(res.data) ? res.data : []);
+      // Không cần toast success ở đây vì đây là hành động load trang mặc định
     } catch (error) {
-      console.error("Lỗi tải danh sách tài xế:", error);
+      console.error("Lỗi fetch:", error);
+      toast.error("Không thể tải danh sách tài xế. Vui lòng thử lại sau."); // Thêm thông báo lỗi load
     } finally {
       setLoading(false);
     }
   };
 
-  // 2. Xử lý Khóa / Mở khóa tài xế
-  const handleToggleLock = async (driverId, currentStatus) => {
-    const action = currentStatus ? "MỞ KHÓA" : "KHÓA";
-    if (window.confirm(`Bạn có chắc muốn ${action} tài khoản tài xế này?`)) {
-      try {
-        // ✅ ĐÃ SỬA: Xóa chữ /api ở đầu
-        await api.put(`/users/${driverId}/toggle-lock`);
-        
-        // Cập nhật lại danh sách local để giao diện đổi màu ngay
-        setDrivers(drivers.map(d => 
-            d.id === driverId ? { ...d, locked: !d.locked } : d
-        ));
-      } catch (error) {
-        alert("Lỗi cập nhật trạng thái: " + (error.response?.data?.message || "Lỗi server"));
-      }
+  useEffect(() => {
+    fetchDrivers();
+  }, []);
+
+  // 2. ACTIONS
+  const handleApprove = async (id) => {
+    if (!window.confirm("Xác nhận duyệt tài xế này?")) return;
+    
+    // Hiển thị loading toast
+    const loadId = toast.loading("Đang xử lý yêu cầu duyệt..."); 
+
+    try {
+      await api.put(`/driver/approve/${id}`);
+      
+      // Cập nhật toast thành success
+      toast.success("Đã duyệt tài xế thành công!", { id: loadId }); 
+      
+      setDrivers(prev => prev.map(d => d.id === id ? { ...d, status: 'ACTIVE' } : d));
+    } catch (error) {
+      // Cập nhật toast thành error
+      const errorMsg = error.response?.data?.message || "Duyệt thất bại. Vui lòng thử lại.";
+      toast.error(errorMsg, { id: loadId }); 
     }
   };
 
-  // 3. Logic Tìm kiếm (Filter)
-  const filteredDrivers = drivers.filter(driver => {
-      const term = searchTerm.toLowerCase();
-      const name = (driver.fullName || '').toLowerCase();
-      const phone = (driver.phone || '');
-      const email = (driver.email || '').toLowerCase();
-      return name.includes(term) || phone.includes(term) || email.includes(term);
-  });
+  const handleBlock = async (id) => {
+    if (!window.confirm("Bạn muốn khóa tài khoản này?")) return;
+    
+    // Hiển thị loading toast
+    const loadId = toast.loading("Đang khóa tài khoản...");
+
+    try {
+      await api.put(`/driver/block/${id}`);
+      
+      // Cập nhật toast thành success
+      toast.success("Đã khóa tài khoản thành công!", { id: loadId });
+      
+      setDrivers(prev => prev.map(d => d.id === id ? { ...d, status: 'BLOCKED' } : d));
+    } catch (error) {
+      // Cập nhật toast thành error
+      const errorMsg = error.response?.data?.message || "Khóa thất bại. Vui lòng thử lại.";
+      toast.error(errorMsg, { id: loadId });
+    }
+  };
+
+  // 3. RENDER
+  const filteredDrivers = drivers.filter(d => 
+    d.fullName?.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    d.phone?.includes(searchTerm)
+  );
 
   return (
-    <div className="manager-container">
+    <div className="dm-container">
       <style>{`
-        .manager-container { font-family: 'Inter', sans-serif; }
-        .m-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 15px; }
-        .m-title { font-size: 24px; font-weight: 800; color: #111827; }
-        
-        /* Search Bar Styles */
-        .search-box { position: relative; width: 100%; max-width: 320px; }
-        .search-inp { width: 100%; padding: 10px 10px 10px 40px; border-radius: 10px; border: 1px solid #e5e7eb; outline: none; transition: 0.2s; }
-        .search-inp:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1); }
-        .search-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #9ca3af; }
-
-        /* Table Styles */
-        .table-wrapper { background: white; border-radius: 16px; border: 1px solid #e5e7eb; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
-        .d-table { width: 100%; border-collapse: collapse; }
-        .d-table th { background: #f9fafb; text-align: left; padding: 16px; font-size: 13px; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #e5e7eb; }
-        .d-table td { padding: 16px; border-bottom: 1px solid #f3f4f6; color: #374151; vertical-align: middle; }
-        .d-table tr:last-child td { border-bottom: none; }
-        .d-table tr:hover { background-color: #f8fafc; }
-
-        /* User Info Styles */
-        .user-info { display: flex; align-items: center; gap: 12px; }
-        .u-avatar { width: 40px; height: 40px; border-radius: 50%; background: #eff6ff; color: #3b82f6; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 16px; }
-        .u-name { font-weight: 600; color: #111827; font-size: 14px; }
-        .u-meta { font-size: 12px; color: #6b7280; margin-top: 2px; }
-
-        /* Contact Styles */
-        .contact-row { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #4b5563; margin-bottom: 4px; }
-
-        /* Status Badge */
-        .badge { padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; text-transform: uppercase; display: inline-flex; align-items: center; gap: 4px; }
-        .b-active { background: #ecfdf5; color: #059669; }
-        .b-locked { background: #fef2f2; color: #ef4444; }
-
-        /* Action Button */
-        .btn-act { padding: 8px 14px; border-radius: 8px; border: none; cursor: pointer; font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 6px; transition: 0.2s; }
-        .btn-lock { background: #fff1f2; color: #ef4444; border: 1px solid #fecaca; }
-        .btn-lock:hover { background: #fee2e2; }
-        .btn-unlock { background: #ecfdf5; color: #059669; border: 1px solid #a7f3d0; }
-        .btn-unlock:hover { background: #d1fae5; }
-        
-        .empty-state { text-align: center; padding: 40px; color: #9ca3af; }
+        .dm-container { padding: 20px; font-family: 'Inter', sans-serif; color: #1e293b; background: #f8fafc; min-height: 100vh; }
+        .dm-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+        .dm-title { font-size: 24px; fontWeight: 800; color: #0f172a; display: flex; align-items: center; gap: 10px; }
+        .dm-search-box { position: relative; width: 300px; }
+        .dm-search-input { width: 100%; padding: 10px 10px 10px 40px; border-radius: 8px; border: 1px solid #cbd5e1; outline: none; }
+        .dm-search-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #94a3b8; }
+        .dm-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 20px; }
+        .dm-card { background: white; border: 1px solid #e2e8f0; borderRadius: 16px; padding: 20px; transition: 0.2s; }
+        .dm-card:hover { transform: translateY(-3px); box-shadow: 0 10px 20px rgba(0,0,0,0.05); }
+        .dm-user-info { display: flex; gap: 15px; margin-bottom: 15px; }
+        .dm-avatar { width: 50px; height: 50px; background: #eff6ff; color: #3b82f6; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 20px; }
+        .dm-badge { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; borderRadius: 6px; font-size: 11px; font-weight: 700; text-transform: uppercase; margin-top: 5px; }
+        .bg-pending { background: #fffbeb; color: #d97706; border: 1px solid #fcd34d; }
+        .bg-active { background: #dcfce7; color: #16a34a; border: 1px solid #86efac; }
+        .bg-blocked { background: #fef2f2; color: #ef4444; border: 1px solid #fca5a5; }
+        .dm-footer { border-top: 1px solid #f1f5f9; padding-top: 15px; display: flex; justify-content: flex-end; gap: 10px; }
+        .btn { padding: 8px 16px; borderRadius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; display: flex; align-items: center; gap: 6px; transition: all 0.2s; }
+        .btn:disabled { opacity: 0.7; cursor: not-allowed; }
+        .btn-approve { background: #16a34a; color: white; }
+        .btn-approve:hover { background: #15803d; }
+        .btn-block { background: white; border: 1px solid #ef4444; color: #ef4444; }
+        .btn-block:hover { background: #fef2f2; }
       `}</style>
 
-      <div className="m-header">
-        <h2 className="m-title">Quản lý Tài xế ({filteredDrivers.length})</h2>
-        <div className="search-box">
-          <Search size={18} className="search-icon" />
-          <input 
-            className="search-inp" 
-            placeholder="Tìm theo tên, SĐT hoặc email..." 
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
+      <div className="dm-header">
+        <div className="dm-title"><Bike size={28} /> Quản lý Tài xế ({filteredDrivers.length})</div>
+        <div className="dm-search-box">
+          <Search size={18} className="dm-search-icon" />
+          <input className="dm-search-input" placeholder="Tìm tên, SĐT..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
         </div>
       </div>
 
-      <div className="table-wrapper">
-        <table className="d-table">
-          <thead>
-            <tr>
-              <th>Tài xế</th>
-              <th>Thông tin liên hệ</th>
-              <th>Trạng thái</th>
-              <th>Hành động</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr><td colSpan="4" className="empty-state">Đang tải dữ liệu...</td></tr>
-            ) : filteredDrivers.length > 0 ? (
-              filteredDrivers.map(driver => (
-                <tr key={driver.id}>
-                  <td>
-                    <div className="user-info">
-                      <div className="u-avatar">
-                        {driver.fullName ? driver.fullName.charAt(0).toUpperCase() : 'T'}
-                      </div>
-                      <div>
-                        <div className="u-name">{driver.fullName}</div>
-                        <div className="u-meta">ID: #{driver.id} • Tham gia: {new Date(driver.createdAt || Date.now()).toLocaleDateString('vi-VN')}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td>
-                    <div className="contact-row">
-                        <Phone size={14} /> {driver.phone || <span style={{color:'#9ca3af', fontStyle:'italic'}}>Chưa có SĐT</span>}
-                    </div>
-                    <div className="contact-row">
-                        <Mail size={14} /> {driver.email}
-                    </div>
-                  </td>
-                  <td>
-                    {driver.locked ? (
-                        <span className="badge b-locked"><ShieldAlert size={12}/> Đã Khóa</span>
-                    ) : (
-                        <span className="badge b-active"><ShieldCheck size={12}/> Hoạt động</span>
-                    )}
-                  </td>
-                  <td>
-                    <button 
-                        className={`btn-act ${driver.locked ? 'btn-unlock' : 'btn-lock'}`}
-                        onClick={() => handleToggleLock(driver.id, driver.locked)}
-                    >
-                        {driver.locked ? <><Unlock size={14}/> Mở khóa</> : <><Lock size={14}/> Khóa TK</>}
-                    </button>
-                  </td>
-                </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan="4" className="empty-state">
-                  <User size={48} style={{opacity:0.2, marginBottom:10}}/>
-                  <p>Không tìm thấy tài xế nào phù hợp.</p>
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      {loading ? (
+        <div style={{textAlign:'center', marginTop: 50}}><Loader2 className="animate-spin" size={32}/></div>
+      ) : (
+        <div className="dm-grid">
+          {filteredDrivers.map(driver => (
+            <div key={driver.id} className="dm-card">
+              <div className="dm-user-info">
+                <div className="dm-avatar">{driver.fullName ? driver.fullName.charAt(0) : 'D'}</div>
+                <div>
+                  <div style={{fontWeight: 700, fontSize: 16}}>{driver.fullName}</div>
+                  <div style={{fontSize: 13, color: '#64748b', marginTop: 4}}><Phone size={12} style={{display:'inline'}}/> {driver.phone}</div>
+                  
+                  {driver.status === 'PENDING' && <span className="dm-badge bg-pending">Chờ duyệt</span>}
+                  {driver.status === 'ACTIVE' && <span className="dm-badge bg-active">Đang hoạt động</span>}
+                  {driver.status === 'BLOCKED' && <span className="dm-badge bg-blocked">Đã khóa</span>}
+                </div>
+              </div>
+
+              <div className="dm-footer">
+                {driver.status === 'PENDING' && (
+                  <button className="btn btn-approve" onClick={() => handleApprove(driver.id)}>
+                    <ShieldCheck size={16}/> Duyệt ngay
+                  </button>
+                )}
+                {driver.status === 'ACTIVE' && (
+                  <button className="btn btn-block" onClick={() => handleBlock(driver.id)}>
+                    <Lock size={16}/> Khóa TK
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

@@ -1,24 +1,71 @@
-import React, { useEffect, useState } from 'react';
-import { ShoppingCart, User, Search, MapPin, LogOut, ClipboardList, Settings, ChevronDown } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useEffect, useState, useRef } from 'react';
+import { ShoppingCart, User, Search, LogOut, ClipboardList, Settings, ChevronDown, Bike, Home, BookOpen, Ticket, Gift, LayoutDashboard, List } from 'lucide-react';
+import { Link, useNavigate, useLocation } from 'react-router-dom'; 
 import { useCart } from '../context/CartContext';
+import DriverRegModal from './DriverRegModal';
+import NotificationDropdown from './NotificationDropdown'; 
+import api from '../api/axios';
 
 const Header = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { cartItems } = useCart();
+  
   const [user, setUser] = useState(null);
   const [showDropdown, setShowDropdown] = useState(false);
   const [searchKeyword, setSearchKeyword] = useState("");
+  const [isScrolled, setIsScrolled] = useState(false);
+  const [showDriverForm, setShowDriverForm] = useState(false);
+  
+  const userRef = useRef(null);
+
+  // --- HELPER FUNCTION FOR AVATAR ---
+  const getAvatarUrl = (path) => {
+    if (!path) return null;
+    if (path.startsWith('http')) return path; // If Google/Facebook link
+    return `http://localhost:8080${path}`;    // If local upload
+  };
+
+  const fetchUserProfile = async () => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+    try {
+      const response = await api.get('/users/profile'); 
+      setUser(response.data);
+      localStorage.setItem('user', JSON.stringify(response.data));
+    } catch (error) {
+      console.error("Error fetching user:", error);
+      if (error.response && error.response.status === 401) {
+          handleLogout();
+      }
+    }
+  };
 
   useEffect(() => {
     const savedUser = localStorage.getItem('user');
     if (savedUser) {
-      setUser(JSON.parse(savedUser));
+        setUser(JSON.parse(savedUser));
     }
+    fetchUserProfile();
+
+    const handleScroll = () => setIsScrolled(window.scrollY > 20);
+    const handleClickOutside = (event) => {
+        if (userRef.current && !userRef.current.contains(event.target)) {
+            setShowDropdown(false);
+        }
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+        window.removeEventListener('scroll', handleScroll);
+        document.removeEventListener('mousedown', handleClickOutside);
+    };
   }, []);
 
   const handleLogout = () => {
     localStorage.removeItem('user');
+    localStorage.removeItem('token');
     setUser(null);
     setShowDropdown(false);
     navigate('/login');
@@ -27,302 +74,146 @@ const Header = () => {
   const handleSearch = (e) => {
     e.preventDefault();
     if (searchKeyword.trim()) {
-      // Navigate to SearchPage with query param
       navigate(`/search?keyword=${encodeURIComponent(searchKeyword.trim())}`);
-      setSearchKeyword(""); // Optional: Clear input after search
+      setSearchKeyword("");
     }
   };
 
-  // Calculate total quantity of items in cart
   const totalQuantity = cartItems.reduce((total, item) => total + item.quantity, 0);
+  const isActive = (path) => location.pathname === path || (path !== '/' && location.pathname.startsWith(path));
 
   return (
-    <header className="hd-wrapper">
-      <style>{`
-        /* --- LAYOUT CHUNG --- */
-        .hd-wrapper { 
-          background-color: #fff; 
-          border-bottom: 1px solid #f3f4f6; 
-          position: sticky; 
-          top: 0; 
-          z-index: 1000; 
-          font-family: 'Inter', sans-serif; 
-          box-shadow: 0 2px 10px rgba(0,0,0,0.03); 
-        }
-        
-        .hd-container { 
-          max-width: 1200px; 
-          margin: 0 auto; 
-          padding: 12px 20px; 
-          display: flex; 
-          justify-content: space-between; 
-          align-items: center; 
-          gap: 20px; 
-        }
-        
-        /* --- LOGO --- */
-        .hd-logo { 
-          font-size: 26px; 
-          font-weight: 900; 
-          color: #111827; 
-          text-decoration: none; 
-          letter-spacing: -1px; 
-          flex-shrink: 0; 
-          display: flex;
-          align-items: center;
-        }
-        .hd-logo span { color: #ef4444; }
+    <>
+      <header className={`hd-wrapper ${isScrolled ? 'hd-scrolled' : ''}`}>
+        <style>{`
+          .hd-wrapper { background: #111827; position: sticky; top: 0; z-index: 1000; transition: 0.4s; border-bottom: 1px solid rgba(255, 255, 255, 0.05); }
+          .hd-scrolled { background: rgba(17, 24, 39, 0.95); backdrop-filter: blur(12px); padding: 5px 0; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
+          .hd-container { max-width: 1240px; margin: 0 auto; padding: 14px 20px; display: flex; justify-content: space-between; align-items: center; gap: 20px; }
+          
+          .hd-logo { font-size: 24px; font-weight: 900; color: #fff; text-decoration: none; letter-spacing: -1.5px; }
+          .hd-logo span { color: #ff4757; }
 
-        /* --- SEARCH BAR --- */
-        .hd-search-form { 
-          flex: 1; 
-          max-width: 450px; 
-          position: relative; 
-        }
-        .hd-search-input { 
-          width: 100%; 
-          background-color: #f9fafb; 
-          border: 1px solid #e5e7eb; 
-          border-radius: 99px; 
-          padding: 10px 45px 10px 20px; 
-          font-size: 14px; 
-          outline: none; 
-          transition: all 0.2s ease; 
-          color: #374151;
-          box-sizing: border-box; /* Fix width issue */
-        }
-        .hd-search-input:focus { 
-          border-color: #ef4444; 
-          background-color: #fff; 
-          box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1); 
-        }
-        .hd-search-btn { 
-          position: absolute; 
-          right: 12px; 
-          top: 50%; 
-          transform: translateY(-50%); 
-          background: none; 
-          border: none; 
-          color: #9ca3af; 
-          cursor: pointer; 
-          padding: 5px;
-          display: flex;
-        }
-        .hd-search-btn:hover { color: #ef4444; }
+          .hd-nav { display: flex; gap: 5px; background: rgba(255,255,255,0.05); padding: 4px; border-radius: 50px; }
+          .hd-nav-link { text-decoration: none; color: #9ca3af; font-size: 14px; font-weight: 600; padding: 8px 16px; border-radius: 20px; transition: 0.3s; display: flex; align-items: center; gap: 6px; }
+          .hd-nav-link:hover { color: #fff; background: rgba(255,255,255,0.1); }
+          .hd-nav-link.active { background: #ff4757; color: white; }
 
-        /* --- ACTIONS (RIGHT SIDE) --- */
-        .hd-actions { 
-          display: flex; 
-          align-items: center; 
-          gap: 24px; 
-        }
-        
-        .hd-item { 
-          display: flex; 
-          align-items: center; 
-          gap: 8px; 
-          cursor: pointer; 
-          text-decoration: none; 
-          color: #4b5563; 
-          font-weight: 500; 
-          font-size: 14px; 
-          transition: 0.2s; 
-          position: relative; 
-        }
-        .hd-item:hover { color: #ef4444; }
+          .hd-search-form { flex: 1; max-width: 300px; position: relative; }
+          .hd-search-input { width: 100%; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 10px 40px 10px 15px; color: #fff; outline: none; }
+          .hd-search-btn { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; color: #9ca3af; cursor: pointer; }
 
-        /* Location (Hidden on mobile) */
-        .hd-location { display: none; } 
-        @media (min-width: 900px) {
-          .hd-location { display: flex; }
-        }
+          .hd-actions { display: flex; align-items: center; gap: 12px; }
+          .hd-icon-btn { width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 12px; background: rgba(255,255,255,0.03); color: #d1d5db; position: relative; cursor: pointer; transition: 0.2s; text-decoration: none; border: none; }
+          .hd-icon-btn:hover { background: rgba(255, 255, 255, 0.1); color: #ff4757; }
+          
+          .hd-badge { position: absolute; top: -5px; right: -5px; background: #ff4757; color: #fff; font-size: 9px; font-weight: 800; height: 16px; min-width: 16px; padding: 0 4px; border-radius: 10px; display: flex; align-items: center; justify-content: center; border: 2px solid #111827; }
 
-        /* --- USER PROFILE --- */
-        .hd-user-wrapper { position: relative; }
-        
-        .hd-user-trigger { 
-          display: flex; 
-          align-items: center; 
-          gap: 10px; 
-          cursor: pointer; 
-          padding: 4px 8px 4px 4px; 
-          border-radius: 30px; 
-          border: 1px solid transparent;
-          transition: 0.2s; 
-        }
-        .hd-user-trigger:hover { 
-          background-color: #f3f4f6; 
-          border-color: #e5e7eb;
-        }
-        
-        .hd-avatar { 
-          width: 36px; 
-          height: 36px; 
-          background: linear-gradient(135deg, #ef4444, #dc2626); 
-          color: #fff; 
-          border-radius: 50%; 
-          display: flex; 
-          align-items: center; 
-          justify-content: center; 
-          font-size: 15px; 
-          font-weight: 700; 
-          box-shadow: 0 2px 5px rgba(239, 68, 68, 0.3);
-        }
-        
-        .hd-user-name {
-          font-weight: 600;
-          color: #374151;
-          font-size: 14px;
-        }
+          .hd-driver-btn { display: flex; align-items: center; gap: 8px; background: linear-gradient(135deg, #10b981, #059669); color: white; padding: 8px 14px; border-radius: 12px; font-size: 13px; font-weight: 600; cursor: pointer; }
+          .hd-user-trigger { display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 5px 10px; border-radius: 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); }
+          .hd-avatar { width: 30px; height: 30px; background: #ff4757; border-radius: 8px; overflow: hidden; display: flex; align-items: center; justify-content: center; color: white; font-weight: 800; font-size: 13px;}
+          .hd-avatar img { width: 100%; height: 100%; object-fit: cover; }
+          .hd-user-info { display: flex; flex-direction: column; }
+          .hd-user-name { font-weight: 700; color: #f3f4f6; font-size: 12px; }
+          .hd-user-role { font-size: 9px; color: #9ca3af; }
 
-        /* --- DROPDOWN MENU --- */
-        .hd-dropdown { 
-          position: absolute; 
-          top: calc(100% + 12px); 
-          right: 0; 
-          background: #fff; 
-          border: 1px solid #f3f4f6; 
-          border-radius: 16px; 
-          width: 220px; 
-          box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1); 
-          overflow: hidden; 
-          animation: slideDown 0.2s cubic-bezier(0.16, 1, 0.3, 1); 
-          z-index: 1100;
-        }
-        
-        .hd-dropdown-item { 
-          display: flex; 
-          align-items: center; 
-          gap: 12px; 
-          padding: 12px 20px; 
-          text-decoration: none; 
-          color: #4b5563; 
-          font-size: 14px; 
-          font-weight: 500;
-          transition: 0.2s; 
-          width: 100%; 
-          border: none; 
-          background: none; 
-          text-align: left; 
-          cursor: pointer; 
-          box-sizing: border-box; /* Fix padding issue */
-        }
-        .hd-dropdown-item:hover { 
-          background-color: #fef2f2; 
-          color: #ef4444; 
-        }
+          .hd-dropdown { position: absolute; top: calc(100% + 15px); right: 0; background: #1f2937; border: 1px solid rgba(255,255,255,0.1); border-radius: 18px; width: 240px; box-shadow: 0 20px 50px rgba(0,0,0,0.5); z-index: 1001; overflow: hidden; }
+          .hd-dropdown-item { display: flex; align-items: center; gap: 12px; padding: 14px 20px; color: #d1d5db; font-size: 14px; font-weight: 500; text-decoration: none; cursor: pointer; border: none; width: 100%; background: none; text-align: left;}
+          .hd-dropdown-item:hover { background: #374151; color: #ff4757; }
+          .hd-dropdown-item.highlight { background: rgba(255, 71, 87, 0.1); color: #ff4757; font-weight: 600; }
 
-        /* --- CART BADGE --- */
-        .hd-cart-icon { position: relative; display: flex; align-items: center; }
-        .hd-badge { 
-          position: absolute; 
-          top: -8px; 
-          right: -10px; 
-          background-color: #ef4444; 
-          color: #fff; 
-          font-size: 11px; 
-          font-weight: 800; 
-          border-radius: 50%; 
-          height: 20px; 
-          width: 20px; 
-          display: flex; 
-          align-items: center; 
-          justify-content: center; 
-          border: 2px solid #fff; 
-          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
+          /* Style cho nút Gift Mission */
+          .mission-btn { position: relative; color: #fbbf24; background: rgba(251, 191, 36, 0.1); border: 1px solid rgba(251, 191, 36, 0.3); }
+          .mission-btn:hover { background: rgba(251, 191, 36, 0.2); transform: translateY(-2px); }
+          .dot-badge { position: absolute; top: 8px; right: 8px; width: 8px; height: 8px; background: #ef4444; border-radius: 50%; border: 1px solid #111827; }
 
-        @keyframes slideDown {
-          from { opacity: 0; transform: translateY(-10px) scale(0.95); }
-          to { opacity: 1; transform: translateY(0) scale(1); }
-        }
+          @media (max-width: 1024px) { .hd-nav { display: none; } }
+          @media (max-width: 768px) { .hd-search-form, .hd-user-info { display: none; } .hd-driver-btn span { display: none; } }
+        `}</style>
 
-        /* --- RESPONSIVE --- */
-        @media (max-width: 768px) {
-          .hd-search-form { display: none; } 
-          .hd-container { padding: 10px 15px; gap: 10px; }
-          .hd-logo { font-size: 22px; }
-          .hd-user-name { display: none; } 
-          .hd-actions { gap: 15px; }
-        }
-      `}</style>
+        <div className="hd-container">
+          <Link to="/" className="hd-logo">FOOD<span>NEST</span>.</Link>
 
-      <div className="hd-container">
-        {/* Logo */}
-        <Link to="/" className="hd-logo">
-          FOOD<span>REVIEW</span>.
-        </Link>
+          <nav className="hd-nav">
+            <Link to="/" className={`hd-nav-link ${isActive('/') ? 'active' : ''}`}><Home size={16}/> Trang chủ</Link>
+            <Link to="/menu" className={`hd-nav-link ${isActive('/menu') ? 'active' : ''}`}><BookOpen size={16}/> Thực đơn</Link>
+            <Link to="/vouchers" className={`hd-nav-link ${isActive('/vouchers') ? 'active' : ''}`}><Ticket size={16}/> Ưu đãi</Link>
+          </nav>
 
-        {/* Search Bar */}
-        <form className="hd-search-form" onSubmit={handleSearch}>
-          <input 
-            type="text" 
-            placeholder="Tìm nhà hàng, món ngon..." 
-            className="hd-search-input"
-            value={searchKeyword}
-            onChange={(e) => setSearchKeyword(e.target.value)}
-          />
-          <button type="submit" className="hd-search-btn">
-            <Search size={18} />
-          </button>
-        </form>
+          <form className="hd-search-form" onSubmit={handleSearch}>
+            <input type="text" placeholder="Tìm kiếm..." className="hd-search-input" value={searchKeyword} onChange={(e) => setSearchKeyword(e.target.value)} />
+            <button type="submit" className="hd-search-btn"><Search size={16} /></button>
+          </form>
 
-        {/* Right Actions */}
-        <div className="hd-actions">
-          {/* Location */}
-          <div className="hd-item hd-location">
-            <MapPin size={18} color="#ef4444" />
-            <span>Hồ Chí Minh</span>
-          </div>
+          <div className="hd-actions">
+            <div className="hd-driver-btn" onClick={() => setShowDriverForm(true)}><Bike /> <span>Đăng ký</span></div>
 
-          {/* User Section */}
-          {user ? (
-            <div className="hd-user-wrapper">
-              <div className="hd-user-trigger" onClick={() => setShowDropdown(!showDropdown)}>
-                <div className="hd-avatar">
-                    {user.fullName ? user.fullName.charAt(0).toUpperCase() : 'U'}
+            {/* --- COMPONENT THÔNG BÁO --- */}
+            <NotificationDropdown />
+            {/* --------------------------- */}
+
+            {user ? (
+              <>
+                {/* 1. NÚT SĂN QUÀ (Mới thêm) */}
+                <Link to="/mission" className="hd-icon-btn mission-btn" title="Săn thưởng">
+                   <Gift size={20} />
+                   <span className="dot-badge"></span>
+                </Link>
+
+                <div className="hd-user-wrapper" style={{position:'relative'}} ref={userRef}>
+                  <div className="hd-user-trigger" onClick={() => setShowDropdown(!showDropdown)}>
+                    <div className="hd-avatar">
+                      {user.avatar ? 
+                          <img src={getAvatarUrl(user.avatar)} alt="Ava" onError={(e)=>{e.target.onerror=null; e.target.src="https://ui-avatars.com/api/?name="+user.fullName}}/> 
+                          : (user.fullName?.charAt(0).toUpperCase() || 'U')
+                      }
+                    </div>
+                    <div className="hd-user-info">
+                      <span className="hd-user-name">{user.fullName || "User"}</span>
+                      <span className="hd-user-role">{user.role === 'ADMIN' ? 'Quản trị viên' : 'Thành viên'}</span>
+                    </div>
+                    <ChevronDown size={12} color="#9ca3af" />
+                  </div>
+                  
+                  {/* DROPDOWN MENU */}
+                  {showDropdown && (
+                    <div className="hd-dropdown">
+                      <div style={{padding: '15px 20px', borderBottom: '1px solid rgba(255,255,255,0.05)'}}>
+                        <p style={{margin:0, color:'#fff', fontWeight:600, fontSize:14}}>{user.fullName}</p>
+                        <p style={{margin:0, color:'#9ca3af', fontSize:11}}>{user.email}</p>
+                      </div>
+
+                      {/* Link DASHBOARD Mới (Nổi bật) */}
+                      <Link to="/dashboard" className="hd-dropdown-item highlight">
+                        <LayoutDashboard size={16} /> Tổng quan
+                      </Link>
+
+                      <Link to="/profile" className="hd-dropdown-item"><User size={16} /> Hồ sơ cá nhân</Link>
+                      <Link to="/history" className="hd-dropdown-item"><ClipboardList size={16} /> Lịch sử đơn hàng</Link>
+                      
+                      {/* Link MISSION trong dropdown */}
+                      <Link to="/mission" className="hd-dropdown-item"><Gift size={16} /> Nhiệm vụ & Quà</Link>
+
+                      {user.role === 'ADMIN' && <Link to="/admin" className="hd-dropdown-item"><Settings size={16} /> Trang quản trị</Link>}
+                      
+                      <button className="hd-dropdown-item" style={{color: '#ff4757'}} onClick={handleLogout}><LogOut size={16} /> Đăng xuất</button>
+                    </div>
+                  )}
                 </div>
-                <span className="hd-user-name">Hi, {user.fullName.split(' ').pop()}</span>
-                <ChevronDown size={14} color="#6b7280" />
-              </div>
-
-              {showDropdown && (
-                <div className="hd-dropdown">
-                  <Link to="/user/dashboard" className="hd-dropdown-item" onClick={() => setShowDropdown(false)}>
-                    <User size={18} /> Dashboard cá nhân
-                  </Link>
-                  <Link to="/history" className="hd-dropdown-item" onClick={() => setShowDropdown(false)}>
-                    <ClipboardList size={18} /> Đơn hàng của tôi
-                  </Link>
-                  <Link to="/settings" className="hd-dropdown-item" onClick={() => setShowDropdown(false)}>
-                    <Settings size={18} /> Cài đặt
-                  </Link>
-                  <div style={{borderTop: '1px solid #f3f4f6', margin: '4px 0'}}></div>
-                  <button className="hd-dropdown-item" style={{color: '#ef4444'}} onClick={handleLogout}>
-                    <LogOut size={18} /> Đăng xuất
-                  </button>
-                </div>
-              )}
-            </div>
-          ) : (
-            <Link to="/login" className="hd-item" style={{fontWeight: 600}}>
-              <User size={20} />
-              <span>Đăng nhập</span>
-            </Link>
-          )}
-
-          {/* Cart Icon */}
-          <Link to="/order" className="hd-item hd-cart-icon">
-            <ShoppingCart size={24} color="#374151" />
-            {totalQuantity > 0 && (
-              <span className="hd-badge">
-                {totalQuantity > 99 ? '99+' : totalQuantity}
-              </span>
+              </>
+            ) : (
+              <Link to="/login" className="hd-icon-btn"><User size={20} /></Link>
             )}
-          </Link>
+
+            <Link to="/order" className="hd-icon-btn" style={{background: 'rgba(255, 71, 87, 0.1)', color: '#ff4757'}}>
+              <ShoppingCart size={20} />
+              {totalQuantity > 0 && <span className="hd-badge">{totalQuantity}</span>}
+            </Link>
+          </div>
         </div>
-      </div>
-    </header>
+      </header>
+
+      <DriverRegModal isOpen={showDriverForm} onClose={() => setShowDriverForm(false)} />
+    </>
   );
 };
 

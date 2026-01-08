@@ -1,172 +1,186 @@
-import React, { useEffect, useState } from 'react';
-import Header from '../components/Header';
-import api from '../api/axios';
+import React, { useState, useEffect } from 'react';
 import { 
-  ShoppingBag, Clock, MapPin, ChevronRight, 
-  CheckCircle2, Truck, XCircle, AlertCircle, Package
+  Package, Clock, CheckCircle, XCircle, Truck, 
+  ShoppingBag, Calendar, Phone, Star, Loader2 
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import api from '../api/axios'; 
+import Header from '../components/Header';
+import Footer from '../components/Footer';
+import toast from 'react-hot-toast';
+import ReviewFormModal from '../components/ReviewFormModal'; 
 
-const History = () => {
+const OrderHistory = () => {
   const navigate = useNavigate();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
-  const user = JSON.parse(localStorage.getItem('user'));
+  
+  const [reviewModalOpen, setReviewModalOpen] = useState(false);
+  const [selectedItemForReview, setSelectedItemForReview] = useState(null);
 
-  useEffect(() => {
-    if (!user) {
-      navigate('/login');
-      return;
-    }
-    fetchOrderHistory();
-  }, []);
+  // Hàm lấy Token an toàn (Tìm mọi ngóc ngách)
+  const getTokenSafe = () => {
+      return localStorage.getItem('token') || 
+             (localStorage.getItem('user') && JSON.parse(localStorage.getItem('user')).token);
+  };
 
-  const fetchOrderHistory = async () => {
+  const fetchOrders = async () => {
     setLoading(true);
     try {
-      // API: GET /api/orders/user/{userId}
-      const res = await api.get(`/orders/user/${user.id}`);
-      // Sắp xếp đơn mới nhất lên đầu
-      const sortedOrders = res.data.sort((a, b) => b.id - a.id);
+      // Gọi API (Axios sẽ tự lấy token gửi đi)
+      const res = await api.get('/orders/my-orders');
+      
+      const sortedOrders = Array.isArray(res.data) 
+        ? res.data.sort((a, b) => new Date(b.createdAt || b.orderDate) - new Date(a.createdAt || a.orderDate))
+        : [];
+        
       setOrders(sortedOrders);
     } catch (error) {
-      console.error("Lỗi lấy lịch sử đơn hàng:", error);
+      console.error("Lỗi lấy đơn hàng:", error);
+      
+      // Chỉ đá về login nếu Backend thực sự trả về 401 (Hết hạn hoặc Sai token)
+      if (error.response && error.response.status === 401) {
+          toast.error("Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.");
+          localStorage.clear(); // Xóa sạch để đăng nhập lại từ đầu
+          navigate('/login');
+      }
     } finally {
       setLoading(false);
     }
   };
 
   const handleCancelOrder = async (orderId) => {
-    if (window.confirm("Bạn có chắc chắn muốn hủy đơn hàng này không?")) {
-      try {
-        // API: PUT /api/orders/{id}/cancel
-        await api.put(`/orders/${orderId}/cancel`);
-        alert("Đã hủy đơn hàng thành công");
-        fetchOrderHistory(); // Load lại danh sách
-      } catch (error) {
-        alert("Không thể hủy đơn hàng. Vui lòng liên hệ hỗ trợ.");
-      }
+    if (!window.confirm("Bạn muốn hủy đơn hàng này?")) return;
+    try {
+      await api.put(`/orders/${orderId}/cancel`);
+      toast.success("Đã hủy đơn hàng");
+      fetchOrders(); 
+    } catch (error) {
+      toast.error(error.response?.data || "Không thể hủy đơn hàng này");
     }
   };
 
-  const getStatusInfo = (status) => {
-    switch (status) {
-      case 'PENDING': return { label: 'Đang chờ duyệt', color: '#f59e0b', icon: <Clock size={16}/> };
-      case 'SHIPPING': return { label: 'Đang giao hàng', color: '#3b82f6', icon: <Truck size={16}/> };
-      case 'COMPLETED': return { label: 'Đã hoàn thành', color: '#10b981', icon: <CheckCircle2 size={16}/> };
-      case 'CANCELLED': return { label: 'Đã hủy', color: '#ef4444', icon: <XCircle size={16}/> };
-      default: return { label: status, color: '#6b7280', icon: <AlertCircle size={16}/> };
+  useEffect(() => {
+    // 👇 KIỂM TRA KỸ HƠN: Tìm token ở cả 2 chỗ trước khi đá về login
+    const token = getTokenSafe();
+    
+    if (!token) {
+        // Chưa đăng nhập thật sự
+        navigate('/login');
+        return;
     }
+    
+    // Nếu có token thì gọi API
+    fetchOrders();
+  }, []);
+
+  // --- Helpers & UI ---
+  const formatPrice = (p) => new Intl.NumberFormat('vi-VN').format(p) + '₫';
+  const formatDate = (d) => d ? new Date(d).toLocaleDateString('vi-VN') : '';
+  const getImg = (img) => img ? (img.startsWith('http') ? img : `http://localhost:8080${img}`) : "https://placehold.co/100";
+  
+  const getStatusInfo = (s) => {
+      if(s === 'PENDING') return {text:'Chờ xác nhận', color:'#eab308', bg:'#fef9c3', icon:<Clock size={16}/>};
+      if(s === 'CONFIRMED') return {text:'Đang chuẩn bị', color:'#3b82f6', bg:'#eff6ff', icon:<Package size={16}/>};
+      if(s === 'DELIVERING') return {text:'Đang giao', color:'#0ea5e9', bg:'#e0f2fe', icon:<Truck size={16}/>};
+      if(s === 'COMPLETED') return {text:'Hoàn thành', color:'#22c55e', bg:'#dcfce7', icon:<CheckCircle size={16}/>};
+      if(s === 'CANCELLED') return {text:'Đã hủy', color:'#ef4444', bg:'#fee2e2', icon:<XCircle size={16}/>};
+      return {text:s, color:'#64748b', bg:'#f1f5f9', icon:<Package size={16}/>};
   };
 
-  const formatPrice = (p) => new Intl.NumberFormat('vi-VN').format(p) + 'đ';
+  const handleOpenReview = (item, orderId) => {
+    setSelectedItemForReview({ ...item, orderId });
+    setReviewModalOpen(true);
+  };
 
   return (
-    <>
+    <div style={{background:'#f8fafc', minHeight:'100vh', display:'flex', flexDirection:'column'}}>
       <Header />
-      <div className="history-wrapper">
-        <style>{`
-          .history-wrapper { background: #f9fafb; min-height: 90vh; padding: 40px 20px; font-family: 'Inter', sans-serif; }
-          .history-container { max-width: 800px; margin: 0 auto; }
-          .page-title { font-size: 24px; font-weight: 900; margin-bottom: 25px; display: flex; align-items: center; gap: 12px; }
-
-          .order-card { background: white; border-radius: 16px; border: 1px solid #e5e7eb; padding: 20px; margin-bottom: 20px; transition: 0.2s; }
-          .order-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
-
-          .order-header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 15px; border-bottom: 1px dashed #eee; margin-bottom: 15px; }
-          .order-id { font-weight: 800; font-size: 15px; color: #111; }
-          .status-badge { display: flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 50px; font-size: 12px; font-weight: 700; }
-
-          .item-list { margin-bottom: 15px; }
-          .item-detail { display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 8px; color: #4b5563; }
-
-          .order-footer { display: flex; justify-content: space-between; align-items: flex-end; }
-          .total-box { text-align: right; }
-          .total-label { font-size: 13px; color: #6b7280; }
-          .total-price { font-size: 18px; font-weight: 900; color: #ef4444; }
-
-          .btn-cancel-order { background: white; color: #ef4444; border: 1.5px solid #ef4444; padding: 8px 16px; border-radius: 10px; font-size: 13px; font-weight: 700; cursor: pointer; transition: 0.2s; }
-          .btn-cancel-order:hover { background: #fef2f2; }
-
-          .empty-history { text-align: center; padding: 80px 0; background: white; border-radius: 20px; border: 1px solid #e5e7eb; }
-        `}</style>
-
-        <div className="history-container">
-          <h1 className="page-title">
-            <ShoppingBag size={28} color="#ef4444"/> Lịch sử đơn hàng
-          </h1>
-
-          {loading ? (
-            <div style={{textAlign: 'center', padding: '50px'}}>Đang tải dữ liệu...</div>
-          ) : orders.length > 0 ? (
+      
+      <div style={{maxWidth:800, margin:'30px auto', width:'100%', padding:'0 15px', flex:1}}>
+        <h2 style={{fontSize:24, fontWeight:800, color:'#1e293b', marginBottom:20}}>Lịch sử đơn hàng</h2>
+        
+        {loading ? (
+             <div style={{textAlign:'center', padding:60, color:'#64748b'}}>
+                <Loader2 className="animate-spin" style={{margin:'0 auto 10px'}}/> 
+                Đang tải dữ liệu...
+                <style>{`.animate-spin { animation: spin 1s linear infinite; } @keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
+             </div>
+        ) : orders.length > 0 ? (
             orders.map(order => {
               const status = getStatusInfo(order.status);
               return (
-                <div key={order.id} className="order-card">
-                  <div className="order-header">
-                    <div>
-                      <span className="order-id">Mã đơn: #{order.id}</span>
-                      <div style={{fontSize: 12, color: '#9ca3af', marginTop: 4}}>{order.orderDate || 'Vừa xong'}</div>
+                <div key={order.id} style={{background:'white', padding:20, borderRadius:16, marginBottom:20, border:'1px solid #e2e8f0', boxShadow:'0 4px 6px -1px rgba(0, 0, 0, 0.05)'}}>
+                  
+                  {/* Header Card */}
+                  <div style={{display:'flex', justifyContent:'space-between', marginBottom:15, paddingBottom:15, borderBottom:'1px solid #f1f5f9'}}>
+                    <div style={{fontWeight:700, color:'#334155', display:'flex', alignItems:'center', gap:8}}>
+                        <ShoppingBag size={18} color="#ef4444"/> Đơn hàng #{order.id}
                     </div>
-                    <div className="status-badge" style={{ backgroundColor: status.color + '15', color: status.color }}>
-                      {status.icon} {status.label}
+                    <div>
+                        <div style={{fontSize:11, color:'#94a3b8', textAlign:'right', marginBottom:4}}>
+                            {formatDate(order.createdAt || order.orderDate)}
+                        </div>
+                        <div style={{background:status.bg, color:status.color, padding:'4px 12px', borderRadius:20, fontSize:12, fontWeight:700, display:'flex', alignItems:'center', gap:5, justifyContent:'flex-end'}}>
+                           {status.icon} {status.text}
+                        </div>
                     </div>
                   </div>
 
-                  <div className="item-list">
-                    {/* Giả sử order có mảng items, nếu không bạn cần chỉnh field này khớp với Backend */}
+                  {/* Items */}
+                  <div>
                     {order.items?.map((item, idx) => (
-                      <div key={idx} className="item-detail">
-                        <span>{item.foodName} <span style={{color: '#9ca3af'}}>x{item.quantity}</span></span>
-                        <span>{formatPrice(item.price * item.quantity)}</span>
+                      <div key={idx} style={{display:'flex', gap:15, marginBottom:15}}>
+                        <img src={getImg(item.image)} style={{width:60, height:60, borderRadius:8, objectFit:'cover', border:'1px solid #e2e8f0'}} onError={(e)=>e.target.src="https://placehold.co/100"}/>
+                        <div style={{flex:1}}>
+                          <div style={{fontWeight:600, color:'#334155'}}>{item.foodName}</div>
+                          <div style={{fontSize:13, color:'#64748b'}}>x{item.quantity} • {formatPrice(item.price)}</div>
+                          
+                          {/* Review Button */}
+                          {order.status === 'COMPLETED' && !item.isReviewed && (
+                             <button onClick={() => handleOpenReview(item, order.id)} style={{marginTop:5, fontSize:12, color:'#ef4444', background:'white', border:'1px solid #ef4444', padding:'4px 10px', borderRadius:4, cursor:'pointer', display:'flex', alignItems:'center', gap:4}}>
+                                <Star size={12}/> Đánh giá
+                             </button>
+                          )}
+                        </div>
                       </div>
                     ))}
-                    {!order.items && <p style={{fontSize: 13, color: '#6b7280'}}><Package size={14}/> Chi tiết đơn hàng đang cập nhật...</p>}
                   </div>
 
-                  <div className="order-footer">
-                    <div>
-                      <div style={{display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#6b7280'}}>
-                        <MapPin size={14}/> {order.address}
-                      </div>
-                    </div>
-                    
-                    <div className="total-box">
-                      <div className="total-label">Tổng thanh toán</div>
-                      <div className="total-price">{formatPrice(order.totalAmount)}</div>
+                  {/* Footer Card */}
+                  <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:15, paddingTop:15, borderTop:'1px solid #f1f5f9'}}>
+                      <div style={{fontSize:14, color:'#64748b'}}>Tổng tiền: <span style={{fontSize:18, fontWeight:700, color:'#ef4444'}}>{formatPrice(order.totalAmount || order.totalPrice)}</span></div>
                       
-                      {/* Chỉ cho phép hủy khi đơn ở trạng thái PENDING */}
-                      {order.status === 'PENDING' && (
-                        <button 
-                          className="btn-cancel-order" 
-                          style={{marginTop: 10}}
-                          onClick={() => handleCancelOrder(order.id)}
-                        >
-                          Hủy đơn hàng
-                        </button>
-                      )}
-                    </div>
+                      <div style={{display:'flex', gap:10}}>
+                         {order.status === 'PENDING' && (
+                           <button onClick={() => handleCancelOrder(order.id)} style={{padding:'8px 16px', background:'#fee2e2', color:'#ef4444', border:'none', borderRadius:6, fontWeight:600, cursor:'pointer'}}>Hủy đơn</button>
+                         )}
+                         <button onClick={() => navigate(`/order/${order.id}`)} style={{padding:'8px 16px', background:'white', border:'1px solid #cbd5e1', color:'#475569', borderRadius:6, fontWeight:600, cursor:'pointer'}}>Chi tiết</button>
+                      </div>
                   </div>
+
                 </div>
               );
             })
-          ) : (
-            <div className="empty-history">
-              <ShoppingBag size={64} color="#e5e7eb" style={{marginBottom: 20}}/>
-              <h3>Bạn chưa có đơn hàng nào!</h3>
-              <p style={{color: '#6b7280', marginBottom: 25}}>Hãy khám phá các món ngon và đặt đơn ngay.</p>
-              <button 
-                onClick={() => navigate('/')}
-                style={{background: '#ef4444', color: 'white', border: 'none', padding: '12px 24px', borderRadius: 12, fontWeight: 700, cursor: 'pointer'}}
-              >
-                Đặt hàng ngay
-              </button>
+        ) : (
+            <div style={{textAlign:'center', padding:60, color:'#94a3b8'}}>
+               <ShoppingBag size={48} style={{opacity:0.2, marginBottom:15}}/>
+               <p>Bạn chưa có đơn hàng nào.</p>
+               <button onClick={()=>navigate('/')} style={{marginTop:15, padding:'10px 20px', background:'#ef4444', color:'white', border:'none', borderRadius:8, fontWeight:600, cursor:'pointer'}}>Đặt món ngay</button>
             </div>
-          )}
-        </div>
+        )}
       </div>
-    </>
+
+      <Footer />
+
+      <ReviewFormModal 
+        isOpen={reviewModalOpen} 
+        onClose={() => setReviewModalOpen(false)}
+        orderItem={selectedItemForReview}
+        onSuccess={fetchOrders}
+      />
+    </div>
   );
 };
 
-export default History;
+export default OrderHistory;

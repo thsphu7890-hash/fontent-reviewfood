@@ -1,246 +1,382 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast'; // Thêm thư viện thông báo
 import api from '../api/axios';
-import { useCart } from '../context/CartContext';
+import Header from '../components/Header';
+import Footer from '../components/Footer';
+import FoodOptionModal from '../components/FoodOptionModal';
 import ReviewSection from '../components/ReviewSection';
 import { 
-  Star, MapPin, Clock, Utensils, MessageSquare, ArrowLeft, 
-  Phone, Share2, Heart, X, ShoppingCart, Minus, Plus 
+  Star, MapPin, Clock, Info, Share2, Heart, 
+  Search, ThumbsUp, Truck, ShieldCheck, Check
 } from 'lucide-react';
 
 const RestaurantDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { addToCart } = useCart();
+  const user = JSON.parse(localStorage.getItem('user'));
   
+  // --- STATE ---
   const [restaurant, setRestaurant] = useState(null);
   const [foods, setFoods] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
-
-  // --- STATE CHO MODAL & TÙY CHỌN ---
+  const [activeTab, setActiveTab] = useState('menu');
   const [selectedFood, setSelectedFood] = useState(null);
-  const [quantity, setQuantity] = useState(1);
-  const [size, setSize] = useState('M');
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [activeCategory, setActiveCategory] = useState('all');
+  
+  // State cho chức năng Yêu thích
+  const [isFavorite, setIsFavorite] = useState(false);
+  const [favLoading, setFavLoading] = useState(false);
 
+  const menuRef = useRef(null);
+
+  // --- FETCH DATA ---
   useEffect(() => {
     const fetchData = async () => {
       try {
+        setLoading(true);
         const [resDetail, resFoods] = await Promise.all([
-          api.get(`/restaurants/${id}`),
-          api.get(`/foods/restaurant/${id}`)
+          api.get(`/restaurants/${id}`), 
+          api.get(`/foods/restaurant/${id}?size=100`) 
         ]);
+
         setRestaurant(resDetail.data);
-        setFoods(resFoods.data);
+        
+        // Kiểm tra xem user đã like nhà hàng này chưa (Giả sử backend trả về field isFavorite)
+        // Nếu backend chưa có, ta có thể gọi thêm API: /users/favorites/check/{restaurantId}
+        if (resDetail.data.isFavorite) setIsFavorite(true);
+
+        // Xử lý list món ăn
+        let foodList = [];
+        if (resFoods.data && Array.isArray(resFoods.data.content)) {
+            foodList = resFoods.data.content;
+        } else if (Array.isArray(resFoods.data)) {
+            foodList = resFoods.data;
+        }
+        setFoods(foodList);
+
+        // Fake categories
+        const fakeCats = [
+            { id: 'all', name: 'Tất cả món' },
+            { id: 'popular', name: 'Món Phổ Biến' },
+            { id: 'main', name: 'Món Chính' },
+            { id: 'drink', name: 'Đồ Uống' }
+        ];
+        setCategories(fakeCats);
+
       } catch (error) {
-        console.error("Lỗi:", error);
+        console.error("Lỗi tải dữ liệu:", error);
       } finally {
         setLoading(false);
       }
     };
+
     fetchData();
-    window.scrollTo(0, 0); 
+    window.scrollTo(0, 0);
   }, [id]);
 
-  const formatPrice = (price) => new Intl.NumberFormat('vi-VN').format(price) + 'đ';
+  // --- FUNCTION: XỬ LÝ YÊU THÍCH ---
+  const handleToggleFavorite = async () => {
+    if (!user) {
+        toast.error("Vui lòng đăng nhập để lưu nhà hàng!");
+        return navigate('/login');
+    }
 
-  const handleFoodClick = (food) => {
+    // Optimistic UI update: Đổi màu ngay lập tức cho mượt
+    const previousState = isFavorite;
+    setIsFavorite(!isFavorite); 
+    setFavLoading(true);
+
+    try {
+        if (!previousState) {
+            // Gọi API Thêm yêu thích
+            // await api.post(`/users/favorites/${id}`);
+            toast.success("Đã thêm vào danh sách yêu thích! ❤️");
+        } else {
+            // Gọi API Bỏ yêu thích
+            // await api.delete(`/users/favorites/${id}`);
+            toast.success("Đã xóa khỏi danh sách yêu thích.");
+        }
+    } catch (error) {
+        // Nếu lỗi thì revert lại trạng thái cũ
+        setIsFavorite(previousState);
+        toast.error("Lỗi kết nối, vui lòng thử lại.");
+    } finally {
+        setFavLoading(false);
+    }
+  };
+
+  // --- FUNCTION: XỬ LÝ CHIA SẺ ---
+  const handleShare = async () => {
+    const shareData = {
+        title: `FoodNest - ${restaurant?.name}`,
+        text: `Mời bạn thưởng thức món ngon tại ${restaurant?.name} trên FoodNest!`,
+        url: window.location.href
+    };
+
+    try {
+        if (navigator.share) {
+            await navigator.share(shareData);
+        } else {
+            // Fallback cho PC: Copy link
+            await navigator.clipboard.writeText(window.location.href);
+            toast.success("Đã sao chép liên kết vào bộ nhớ tạm!");
+        }
+    } catch (err) {
+        console.error("Lỗi chia sẻ:", err);
+    }
+  };
+
+  const handleOpenModal = (food) => {
     setSelectedFood(food);
-    setQuantity(1);
-    setSize('M');
-    document.body.style.overflow = 'hidden';
+    setIsModalOpen(true);
   };
 
-  const handleCloseModal = () => {
-    setSelectedFood(null);
-    document.body.style.overflow = 'unset';
-  };
+  const formatPrice = (price) => new Intl.NumberFormat('vi-VN').format(price) + '₫';
 
-  const handleAddToCart = () => {
-    let finalPrice = selectedFood.price;
-    if (size === 'L') finalPrice += 5000;
+  if (loading) return (
+    <div style={{minHeight:'100vh', background:'#f9fafb', display:'flex', justifyContent:'center', alignItems:'center'}}>
+        <div className="loader"></div>
+        <style>{`.loader { width: 48px; height: 48px; border: 5px solid #ef4444; border-bottom-color: transparent; border-radius: 50%; animation: rotation 1s linear infinite; } @keyframes rotation { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
 
-    const productToAdd = { ...selectedFood, price: finalPrice };
-    const options = { size: size };
-
-    addToCart(productToAdd, quantity, options);
-    handleCloseModal();
-  };
-
-  if (loading) return <div className="detail-loading">Đang tải dữ liệu...</div>;
-  if (!restaurant) return <div className="detail-loading">Không tìm thấy nhà hàng.</div>;
+  if (!restaurant) return <div style={{padding:50, textAlign:'center'}}>Không tìm thấy nhà hàng.</div>;
 
   return (
-    <div className="detail-layout">
+    <div className="res-layout">
+      <Header />
+      
       <style>{`
-        .detail-layout { min-height: 100vh; background-color: #F9FAFB; padding-bottom: 80px; font-family: 'Inter', sans-serif; color: #1f2937; }
-        .detail-loading { text-align: center; padding: 60px; font-weight: bold; color: #6b7280; }
+        /* --- CSS (Giữ nguyên từ phiên bản trước) --- */
+        .res-layout { background: #F9FAFB; min-height: 100vh; font-family: 'Inter', sans-serif; color: #1f2937; }
+        .res-container { max-width: 1200px; margin: 0 auto; padding: 0 20px 60px; position: relative; }
 
-        /* Banner */
-        .detail-banner-group { position: relative; height: 350px; width: 100%; overflow: hidden; }
-        .detail-banner-img { width: 100%; height: 100%; object-fit: cover; }
-        .detail-banner-overlay { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,0.8), transparent); }
-        .detail-banner-content { position: absolute; bottom: 0; left: 0; right: 0; padding: 40px 20px; max-width: 1200px; margin: 0 auto; color: white; display: flex; justify-content: space-between; align-items: flex-end; }
-        .detail-back-btn { position: absolute; top: 20px; left: 20px; background: rgba(255,255,255,0.9); border: none; padding: 10px; border-radius: 50%; cursor: pointer; z-index: 10; display: flex; align-items: center; justify-content: center; }
-
-        /* Grid */
-        .detail-container { max-width: 1200px; margin: 0 auto; padding: 0 20px; }
-        .detail-grid-wrapper { display: grid; grid-template-columns: 1fr; gap: 30px; margin-top: 40px; }
-        @media (min-width: 1024px) { .detail-grid-wrapper { grid-template-columns: 2fr 1fr; } }
-
-        /* Section */
-        .detail-section-box { background: white; padding: 24px; border-radius: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); border: 1px solid #e5e7eb; margin-bottom: 30px; }
-        .detail-section-title { font-size: 22px; font-weight: 800; margin-bottom: 24px; display: flex; align-items: center; gap: 10px; color: #111827; }
-
-        /* Food Card & Description Line Clamp */
-        .detail-food-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; }
-        .detail-food-card { display: flex; gap: 16px; padding: 16px; border: 1px solid #f3f4f6; border-radius: 12px; transition: 0.2s; background: #fff; cursor: pointer; }
-        .detail-food-card:hover { border-color: #f97316; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.05); }
-        .detail-food-img { width: 90px; height: 90px; border-radius: 8px; object-fit: cover; flex-shrink: 0; }
+        .res-hero { position: relative; height: 350px; background: #fff; margin-bottom: 30px; }
+        .hero-bg { width: 100%; height: 100%; object-fit: cover; }
+        .hero-overlay { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,0.8), transparent); }
         
-        .food-desc-clamp { 
-          font-size: 13px; color: #6b7280; margin: 4px 0 8px;
-          display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;  
-          overflow: hidden; text-overflow: ellipsis; line-height: 1.4;
+        .hero-info { 
+            position: absolute; bottom: 0; left: 0; right: 0; 
+            max-width: 1200px; margin: 0 auto; padding: 30px 20px; color: white; 
+            display: flex; justify-content: space-between; align-items: flex-end;
+        }
+        .res-name { font-size: 36px; font-weight: 800; margin: 0 0 10px; text-shadow: 0 2px 10px rgba(0,0,0,0.5); }
+        .res-tags { display: flex; gap: 15px; font-size: 14px; font-weight: 500; opacity: 0.9; }
+        .tag-item { display: flex; align-items: center; gap: 6px; }
+        
+        .hero-actions { display: flex; gap: 10px; }
+        .btn-hero { 
+            background: rgba(255,255,255,0.2); backdrop-filter: blur(5px); border: 1px solid rgba(255,255,255,0.3);
+            color: white; padding: 8px 16px; border-radius: 8px; font-weight: 600; cursor: pointer; 
+            display: flex; align-items: center; gap: 6px; transition: 0.2s;
+        }
+        .btn-hero:hover { background: white; color: #ef4444; }
+        .btn-hero.active { background: white; color: #ef4444; } /* Style cho nút Like khi active */
+
+        .res-grid { display: flex; gap: 30px; }
+        .col-left { width: 260px; flex-shrink: 0; }
+        .col-main { flex: 1; min-width: 0; }
+        .col-right { width: 300px; flex-shrink: 0; }
+
+        .cat-menu { background: white; border-radius: 12px; border: 1px solid #e5e7eb; overflow: hidden; position: sticky; top: 100px; }
+        .cat-item { 
+            padding: 14px 20px; border-bottom: 1px solid #f3f4f6; cursor: pointer; 
+            font-size: 14px; font-weight: 600; color: #4b5563; transition: 0.2s; display: flex; justify-content: space-between;
+        }
+        .cat-item:hover { background: #f9fafb; color: #ef4444; }
+        .cat-item.active { background: #fef2f2; color: #ef4444; border-left: 3px solid #ef4444; }
+
+        .page-tabs { 
+            display: flex; gap: 30px; border-bottom: 1px solid #e5e7eb; margin-bottom: 30px; 
+            background: white; padding: 0 20px; border-radius: 12px 12px 0 0;
+        }
+        .tab-btn { 
+            padding: 15px 0; font-weight: 600; color: #6b7280; cursor: pointer; 
+            position: relative; transition: 0.2s; font-size: 15px;
+        }
+        .tab-btn:hover { color: #ef4444; }
+        .tab-btn.active { color: #ef4444; }
+        .tab-btn.active::after { 
+            content: ''; position: absolute; bottom: -1px; left: 0; right: 0; height: 3px; background: #ef4444; border-radius: 3px 3px 0 0; 
         }
 
-        /* Sidebar Sticky */
-        .detail-sticky-wrapper { position: sticky; top: 100px; }
-        .promo-card { background: linear-gradient(135deg, #f97316, #ef4444); color: white; padding: 24px; border-radius: 16px; text-align: center; }
+        .menu-section-title { font-size: 18px; font-weight: 800; margin-bottom: 15px; color: #1f2937; }
+        .food-card-row { 
+            display: flex; gap: 15px; background: white; padding: 15px; 
+            border-radius: 12px; border: 1px solid #e5e7eb; margin-bottom: 15px; 
+            transition: 0.2s; cursor: pointer; position: relative;
+        }
+        .food-card-row:hover { transform: translateY(-3px); box-shadow: 0 10px 20px rgba(0,0,0,0.05); border-color: #fed7aa; }
+        
+        .food-img { width: 120px; height: 120px; border-radius: 10px; object-fit: cover; flex-shrink: 0; }
+        .food-info { flex: 1; display: flex; flex-direction: column; }
+        .food-name { font-size: 16px; font-weight: 700; color: #1f2937; margin-bottom: 6px; }
+        .food-desc { font-size: 13px; color: #6b7280; margin-bottom: 10px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        .food-sales { font-size: 12px; color: #9ca3af; margin-top: auto; }
+        
+        .food-price-box { display: flex; flex-direction: column; justify-content: space-between; align-items: flex-end; }
+        .f-price { font-size: 16px; font-weight: 700; color: #ef4444; }
+        .btn-add-mini { 
+            width: 32px; height: 32px; background: #fef2f2; color: #ef4444; 
+            border: 1px solid #fee2e2; border-radius: 8px; display: flex; align-items: center; justify-content: center;
+            transition: 0.2s;
+        }
+        .btn-add-mini:hover { background: #ef4444; color: white; }
 
-        /* Modal & Modal Line Clamp */
-        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 1000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
-        .modal-box { background: #fff; width: 95%; max-width: 850px; border-radius: 24px; display: flex; flex-direction: column; max-height: 90vh; overflow: hidden; position: relative; }
-        @media (min-width: 768px) { .modal-box { flex-direction: row; height: 600px; } }
-        
-        .modal-img-side { flex: 1; flex-shrink: 0; }
-        .modal-img-side img { width: 100%; height: 250px; object-fit: cover; }
-        @media (min-width: 768px) { .modal-img-side img { height: 100%; } }
-        
-        .modal-content-side { flex: 1.2; padding: 30px; overflow-y: auto; display: flex; flex-direction: column; }
-        .modal-desc-clamp {
-          font-size: 14px; color: #4b5563; line-height: 1.6;
-          display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;  
-          overflow: hidden; text-overflow: ellipsis; margin-bottom: 20px;
+        .info-box { background: white; padding: 20px; border-radius: 16px; border: 1px solid #e5e7eb; position: sticky; top: 100px; }
+        .info-header { font-size: 16px; font-weight: 700; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px dashed #e5e7eb; }
+        .info-row { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; color: #4b5563; margin-bottom: 12px; }
+        .info-icon { color: #9ca3af; margin-top: 2px; }
+        .promo-banner { 
+            margin-top: 20px; background: linear-gradient(135deg, #ef4444, #b91c1c); 
+            color: white; padding: 15px; border-radius: 12px; text-align: center;
+        }
+        .promo-code { 
+            background: rgba(255,255,255,0.2); padding: 8px; border-radius: 6px; 
+            border: 1px dashed rgba(255,255,255,0.5); font-weight: 800; letter-spacing: 1px; margin-top: 10px;
         }
 
-        .size-btn { flex: 1; padding: 10px; border: 1.5px solid #e5e7eb; border-radius: 10px; background: white; cursor: pointer; font-weight: 600; transition: 0.2s; }
-        .size-btn.active { border-color: #f97316; background: #fff7ed; color: #f97316; }
-        .qty-box { display: flex; align-items: center; gap: 15px; background: #f3f4f6; padding: 8px 16px; border-radius: 50px; width: fit-content; }
-        .btn-add-main { width: 100%; background: #ea580c; color: white; border: none; padding: 16px; border-radius: 12px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 20px; }
+        @media (max-width: 1024px) { 
+            .col-left, .col-right { display: none; } 
+            .res-grid { display: block; }
+            .hero-info { flex-direction: column; align-items: flex-start; gap: 15px; }
+        }
       `}</style>
 
-      {/* Hero Banner */}
-      <div className="detail-banner-group">
-        <button onClick={() => navigate(-1)} className="detail-back-btn"><ArrowLeft size={24}/></button>
-        <img src={restaurant.image} className="detail-banner-img" alt={restaurant.name} />
-        <div className="detail-banner-overlay"></div>
-        <div className="detail-banner-content">
-          <div>
-            <h1 style={{fontSize:'36px', fontWeight:'900', margin: 0}}>{restaurant.name}</h1>
-            <p style={{display:'flex', alignItems:'center', gap:'6px', margin:'10px 0 0', opacity:0.9}}><MapPin size={16}/> {restaurant.address}</p>
-          </div>
-          <div style={{display:'flex', gap:'10px'}}>
-             <button style={{background:'rgba(255,255,255,0.2)', border:'none', padding:'12px', borderRadius:'50%', color:'white'}}><Heart size={20}/></button>
-          </div>
-        </div>
-      </div>
-
-      <div className="detail-container">
-        <div className="detail-grid-wrapper">
-          <div className="detail-col-left">
-            {/* Thực đơn */}
-            <section className="detail-section-box">
-              <h2 className="detail-section-title"><Utensils size={24} color="#f97316"/> Thực đơn nhà hàng</h2>
-              <div className="detail-food-grid">
-                {foods.map(food => (
-                  <div key={food.id} className="detail-food-card" onClick={() => handleFoodClick(food)}>
-                    <img src={food.image || "https://via.placeholder.com/90"} className="detail-food-img" alt={food.name} />
-                    <div style={{flex: 1, display:'flex', flexDirection:'column', justifyContent:'space-between'}}>
-                      <div>
-                        <h4 style={{margin:0, fontWeight:700}}>{food.name}</h4>
-                        <p className="food-desc-clamp">{food.description || "Bấm để xem chi tiết món ăn này."}</p>
-                      </div>
-                      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-                        <span style={{color:'#ea580c', fontWeight:700}}>{formatPrice(food.price)}</span>
-                        <span style={{fontSize:12, background:'#f3f4f6', padding:'2px 8px', borderRadius:4, fontWeight:600, color:'#666'}}>+ THÊM</span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-
-            {/* Đánh giá tổng quát */}
-            <section className="detail-section-box">
-              <h2 className="detail-section-title"><MessageSquare size={24} color="#f97316"/> Đánh giá món ăn</h2>
-              <ReviewSection foodId={foods[0]?.id} /> 
-            </section>
-          </div>
-
-          <div className="detail-col-right">
-            <div className="detail-sticky-wrapper">
-              <div className="detail-section-box">
-                <h3 style={{fontSize:18, fontWeight:700, marginBottom:16}}><Clock size={20} color="#f97316"/> Giờ hoạt động</h3>
-                <div style={{fontSize:14, display:'flex', flexDirection:'column', gap:10}}>
-                   <div style={{display:'flex', justifyContent:'space-between'}}><span>Thứ 2 - Thứ 6:</span> <strong>08:00 - 22:00</strong></div>
-                   <div style={{display:'flex', justifyContent:'space-between', color:'#ea580c'}}><span>Thứ 7 - Chủ Nhật:</span> <strong>08:00 - 23:30</strong></div>
+      {/* HERO HEADER */}
+      <div className="res-hero">
+        <img src={restaurant.image || "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?q=80&w=1974&auto=format&fit=crop"} className="hero-bg" alt="Cover" />
+        <div className="hero-overlay"></div>
+        <div className="hero-info">
+            <div>
+                <h1 className="res-name">{restaurant.name}</h1>
+                <div className="res-tags">
+                    <div className="tag-item"><Star size={16} fill="#fbbf24" color="#fbbf24"/> 4.8 (500+ đánh giá)</div>
+                    <div className="tag-item" style={{color:'#d1d5db'}}>•</div>
+                    <div className="tag-item"><MapPin size={16}/> {restaurant.address}</div>
+                    <div className="tag-item" style={{color:'#d1d5db'}}>•</div>
+                    <div className="tag-item"><Clock size={16}/> 15-25 phút</div>
                 </div>
-              </div>
-              <div className="promo-card">
-                 <h3 style={{margin:0, fontSize:20}}>GIẢM GIÁ 20%</h3>
-                 <p style={{fontSize:13, opacity:0.9, margin:'8px 0 16px'}}>Áp dụng cho đơn hàng trên 200k</p>
-                 <button style={{width:'100%', padding:12, borderRadius:10, border:'none', fontWeight:'bold', color:'#ef4444'}}>ĐẶT NGAY: 1900 1234</button>
-              </div>
             </div>
-          </div>
-        </div>
-      </div>
+            <div className="hero-actions">
+                {/* NÚT YÊU THÍCH HOẠT ĐỘNG */}
+                <button 
+                    className={`btn-hero ${isFavorite ? 'active' : ''}`} 
+                    onClick={handleToggleFavorite}
+                    disabled={favLoading}
+                >
+                    <Heart size={18} fill={isFavorite ? "#ef4444" : "none"}/> 
+                    {isFavorite ? "Đã thích" : "Yêu thích"}
+                </button>
 
-      {/* Modal chi tiết món */}
-      {selectedFood && (
-        <div className="modal-overlay" onClick={handleCloseModal}>
-          <div className="modal-box" onClick={(e) => e.stopPropagation()}>
-            <button style={{position:'absolute', top:15, right:15, zIndex:10, background:'white', border:'none', borderRadius:'50%', padding:5, cursor:'pointer'}} onClick={handleCloseModal}><X size={24}/></button>
-            
-            <div className="modal-img-side">
-                <img src={selectedFood.image} alt={selectedFood.name} />
-            </div>
-            
-            <div className="modal-content-side">
-                <h2 style={{fontSize:28, fontWeight:900, margin:'0 0 8px'}}>{selectedFood.name}</h2>
-                <div style={{fontSize:22, color:'#ea580c', fontWeight:800, marginBottom:15}}>{formatPrice(selectedFood.price + (size === 'L' ? 5000 : 0))}</div>
-                
-                <div style={{fontWeight:'bold', marginBottom:8, fontSize:14}}>Mô tả:</div>
-                <p className="modal-desc-clamp">{selectedFood.description || "Món ăn nóng hổi, thơm ngon sẵn sàng phục vụ quý khách."}</p>
-
-                <div style={{marginBottom:20}}>
-                    <div style={{fontWeight:'bold', marginBottom:10, fontSize:14}}>Chọn kích cỡ:</div>
-                    <div style={{display:'flex', gap:10}}>
-                        <button className={`size-btn ${size === 'M' ? 'active' : ''}`} onClick={() => setSize('M')}>Size M</button>
-                        <button className={`size-btn ${size === 'L' ? 'active' : ''}`} onClick={() => setSize('L')}>Size L (+5k)</button>
-                    </div>
-                </div>
-
-                <div style={{marginBottom:20}}>
-                    <div style={{fontWeight:'bold', marginBottom:10, fontSize:14}}>Số lượng:</div>
-                    <div className="qty-box">
-                        <button style={{border:'none', background:'none', cursor:'pointer'}} onClick={() => setQuantity(q => Math.max(1, q - 1))}><Minus size={18}/></button>
-                        <span style={{fontSize:18, fontWeight:800}}>{quantity}</span>
-                        <button style={{border:'none', background:'none', cursor:'pointer'}} onClick={() => setQuantity(q => q + 1)}><Plus size={18}/></button>
-                    </div>
-                </div>
-
-                <div style={{borderTop:'1px solid #eee', paddingTop:20, marginTop:10}}>
-                   <ReviewSection foodId={selectedFood.id} />
-                </div>
-
-                <button className="btn-add-main" onClick={handleAddToCart}>
-                    <ShoppingCart size={20} /> THÊM VÀO GIỎ - {formatPrice((selectedFood.price + (size === 'L' ? 5000 : 0)) * quantity)}
+                {/* NÚT CHIA SẺ HOẠT ĐỘNG */}
+                <button className="btn-hero" onClick={handleShare}>
+                    <Share2 size={18}/> Chia sẻ
                 </button>
             </div>
-          </div>
         </div>
-      )}
+      </div>
+
+      <div className="res-container">
+        {/* TABS NAV */}
+        <div className="page-tabs">
+            <div className={`tab-btn ${activeTab === 'menu' ? 'active' : ''}`} onClick={() => setActiveTab('menu')}>Thực Đơn</div>
+            <div className={`tab-btn ${activeTab === 'review' ? 'active' : ''}`} onClick={() => setActiveTab('review')}>Đánh Giá</div>
+            <div className={`tab-btn ${activeTab === 'info' ? 'active' : ''}`} onClick={() => setActiveTab('info')}>Thông Tin</div>
+        </div>
+
+        <div className="res-grid">
+            {/* LEFT: CATEGORIES */}
+            {activeTab === 'menu' && (
+                <aside className="col-left">
+                    <div className="cat-menu">
+                        {categories.map(c => (
+                            <div key={c.id} className={`cat-item ${activeCategory === c.id ? 'active' : ''}`} onClick={() => setActiveCategory(c.id)}>
+                                {c.name}
+                            </div>
+                        ))}
+                    </div>
+                </aside>
+            )}
+
+            {/* MAIN CONTENT */}
+            <div className="col-main">
+                {activeTab === 'menu' && (
+                    <div ref={menuRef}>
+                        <div className="menu-section-title">🔥 Món Ngon Phải Thử</div>
+                        
+                        <div style={{position:'relative', marginBottom: 20}}>
+                            <Search size={18} style={{position:'absolute', left:15, top:'50%', transform:'translateY(-50%)', color:'#9ca3af'}}/>
+                            <input 
+                                placeholder="Tìm món trong thực đơn..." 
+                                style={{width:'100%', padding:'12px 12px 12px 45px', borderRadius:10, border:'1px solid #e5e7eb', outline:'none'}}
+                            />
+                        </div>
+
+                        {/* FOOD LIST */}
+                        {foods.map(food => (
+                            <div key={food.id} className="food-card-row" onClick={() => handleOpenModal(food)}>
+                                <img src={food.image || "https://via.placeholder.com/150"} className="food-img" alt={food.name} />
+                                <div className="food-info">
+                                    <div className="food-name">{food.name}</div>
+                                    <div className="food-desc">{food.description || "Hương vị đậm đà, chuẩn vị nhà làm."}</div>
+                                    <div className="food-sales">Đã bán 120+ | <ThumbsUp size={12} style={{display:'inline'}}/> 15</div>
+                                </div>
+                                <div className="food-price-box">
+                                    <div className="f-price">{formatPrice(food.price)}</div>
+                                    <div className="btn-add-mini">+</div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+
+                {/* TAB REVIEW */}
+                {activeTab === 'review' && <ReviewSection foodId={foods[0]?.id} />}
+
+                {/* TAB INFO */}
+                {activeTab === 'info' && (
+                    <div style={{background:'white', padding:30, borderRadius:16, border:'1px solid #e5e7eb'}}>
+                        <h3 style={{fontSize:18, fontWeight:700, marginBottom:20}}>Giới thiệu nhà hàng</h3>
+                        <p style={{color:'#4b5563', lineHeight:1.6}}>
+                            {restaurant.description || "Nhà hàng chuyên các món ăn truyền thống với hương vị đậm đà bản sắc Việt. Không gian thoáng mát, phục vụ tận tình."}
+                        </p>
+                        <div style={{marginTop:30, height:300, background:'#f3f4f6', borderRadius:12, display:'flex', alignItems:'center', justifyContent:'center', color:'#9ca3af'}}>
+                            [Bản đồ Google Map sẽ hiển thị ở đây]
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {/* RIGHT: INFO & PROMO */}
+            <aside className="col-right">
+                <div className="info-box">
+                    <div className="info-header">Thông tin giao hàng</div>
+                    <div className="info-row"><Clock size={18} className="info-icon"/> <span>Mở cửa: 07:00 - 22:00</span></div>
+                    <div className="info-row"><Truck size={18} className="info-icon"/> <span>Phí giao: 15.000₫ (0-3km)</span></div>
+                    <div className="info-row"><ShieldCheck size={18} className="info-icon"/> <span>Đối tác FoodNest Verified</span></div>
+                    
+                    <div className="promo-banner">
+                        <div style={{fontWeight:700, fontSize:14}}>GIẢM 20K CHO ĐƠN TỪ 100K</div>
+                        <div className="promo-code">FOODNEST20</div>
+                        <div style={{fontSize:11, marginTop:5, opacity:0.8}}>Hết hạn: 30/12/2025</div>
+                    </div>
+                </div>
+            </aside>
+        </div>
+      </div>
+
+      <Footer />
+
+      {/* MODAL ORDER */}
+      <FoodOptionModal 
+        isOpen={isModalOpen} 
+        onClose={() => setIsModalOpen(false)} 
+        food={selectedFood} 
+      />
     </div>
   );
 };

@@ -1,29 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import { 
   X, Save, Link as LinkIcon, Utensils, DollarSign, 
-  AlignLeft, Store, Layers, Loader, Image as ImageIcon
+  AlignLeft, Store, Layers, Loader, UploadCloud, Image as ImageIcon, CheckSquare, Square
 } from 'lucide-react';
 import api from '../../api/axios';
 
 const AddFoodModal = ({ isOpen, onClose, onRefresh, editingFood }) => {
   // --- STATE ---
   const [formData, setFormData] = useState({
-    name: '',
-    price: '',
-    description: '',
-    restaurantId: '',
-    categoryId: '',
-    image: '' // Changed to store URL string
+    name: '', price: '', description: '',
+    restaurantId: '', 
+    categoryIds: [], // Changed to array to hold multiple IDs
+    image: ''
   });
   
-  // Data for Dropdowns
   const [restaurants, setRestaurants] = useState([]);
   const [categories, setCategories] = useState([]);
-  
   const [isLoading, setIsLoading] = useState(false);
+  const [previewImage, setPreviewImage] = useState(null);
 
-  // --- EFFECT ---
-  // 1. Load Restaurants & Categories when Modal opens
+  // --- FETCH DATA (Restaurants & Categories) ---
   useEffect(() => {
     if (isOpen) {
       const fetchData = async () => {
@@ -34,71 +30,77 @@ const AddFoodModal = ({ isOpen, onClose, onRefresh, editingFood }) => {
           ]);
           setRestaurants(resRes.data);
           setCategories(catRes.data);
-        } catch (error) {
-          console.error("Error loading dropdown data:", error);
-        }
+        } catch (error) { console.error("Error loading data:", error); }
       };
       fetchData();
     }
   }, [isOpen]);
 
-  // 2. Fill data if in Edit Mode
+  // --- LOAD DATA FOR EDIT ---
   useEffect(() => {
     if (editingFood) {
+      // EDIT MODE: Populate form with existing data
       setFormData({
-        name: editingFood.name,
-        price: editingFood.price,
+        name: editingFood.name || '',
+        price: editingFood.price || '',
         description: editingFood.description || '',
         restaurantId: editingFood.restaurantId || '',
-        categoryId: editingFood.categoryId || '',
-        image: editingFood.image || '' // Fill image URL
+        // Map existing categories to an array of IDs
+        categoryIds: editingFood.categories ? editingFood.categories.map(c => c.id) : [],
+        image: editingFood.image || ''
       });
+      setPreviewImage(editingFood.image);
     } else {
-      // Reset form for Add Mode
-      setFormData({ name: '', price: '', description: '', restaurantId: '', categoryId: '', image: '' });
+      // ADD MODE: Reset form
+      setFormData({ name: '', price: '', description: '', restaurantId: '', categoryIds: [], image: '' });
+      setPreviewImage(null);
     }
   }, [editingFood, isOpen]);
 
-  // --- HANDLERS ---
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+    
+    if (name === 'image') setPreviewImage(value);
+  };
+
+  // --- MULTI-CATEGORY SELECTION LOGIC ---
+  const toggleCategory = (catId) => {
+    setFormData(prev => {
+      const currentIds = prev.categoryIds;
+      if (currentIds.includes(catId)) {
+        // If already selected -> Remove
+        return { ...prev, categoryIds: currentIds.filter(id => id !== catId) };
+      } else {
+        // If not selected -> Add
+        return { ...prev, categoryIds: [...currentIds, catId] };
+      }
+    });
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsLoading(true);
-
     try {
-      // Send JSON data directly
       const payload = {
-        name: formData.name,
-        price: parseFloat(formData.price), // Ensure price is a number
-        description: formData.description,
-        restaurantId: parseInt(formData.restaurantId), // Ensure ID is a number
-        categoryId: parseInt(formData.categoryId),     // Ensure ID is a number
-        image: formData.image // Send the URL string
+        ...formData,
+        price: parseFloat(formData.price),
+        restaurantId: parseInt(formData.restaurantId),
+        categoryIds: formData.categoryIds, // Send array of IDs
       };
 
       if (editingFood) {
-        // Update (PUT)
+        // CALL EDIT API (PUT)
         await api.put(`/foods/${editingFood.id}`, payload);
-        alert("Food updated successfully!");
       } else {
-        // Add New (POST)
+        // CALL ADD API (POST)
         await api.post('/foods', payload);
-        alert("Food added successfully!");
       }
-
-      onRefresh(); // Refresh parent list
-      onClose();   // Close modal
-
+      onRefresh(); // Refresh the list outside
+      onClose();
     } catch (error) {
-      console.error("Error saving food:", error);
-      alert("An error occurred, please try again!");
-    } finally {
-      setIsLoading(false);
-    }
+      alert("Error saving data: " + (error.response?.data?.message || error.message));
+    } finally { setIsLoading(false); }
   };
 
   if (!isOpen) return null;
@@ -106,146 +108,200 @@ const AddFoodModal = ({ isOpen, onClose, onRefresh, editingFood }) => {
   return (
     <div className="modal-overlay">
       <style>{`
-        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
-        .modal-container { background: #fff; width: 100%; max-width: 600px; border-radius: 16px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); overflow: hidden; animation: slideIn 0.3s ease; }
-        .modal-header { padding: 20px 24px; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center; background: #f9fafb; }
-        .modal-title { font-size: 20px; font-weight: 800; color: #111827; }
-        .btn-close { background: none; border: none; cursor: pointer; color: #6b7280; transition: 0.2s; padding: 4px; border-radius: 50%; }
-        .btn-close:hover { background: #fee2e2; color: #ef4444; }
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 2000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px); animation: fadeIn 0.2s; }
+        .modal-container { background: #fff; width: 900px; max-height: 90vh; border-radius: 20px; display: flex; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
         
-        .modal-body { padding: 24px; max-height: 80vh; overflow-y: auto; }
-        .form-group { margin-bottom: 16px; }
-        .form-label { display: block; font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
-        .form-input, .form-select, .form-textarea { width: 100%; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 8px; outline: none; transition: 0.2s; font-family: inherit; }
-        .form-input:focus, .form-select:focus, .form-textarea:focus { border-color: #ef4444; ring: 2px solid #fee2e2; }
-        
-        /* Image Preview Styling */
-        .image-preview-box { border: 2px dashed #d1d5db; border-radius: 12px; height: 180px; display: flex; align-items: center; justify-content: center; overflow: hidden; background: #f9fafb; margin-top: 10px; position: relative; }
-        .preview-img { width: 100%; height: 100%; object-fit: cover; }
-        .no-image-placeholder { color: #9ca3af; font-size: 14px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+        /* LEFT: IMAGE PREVIEW */
+        .modal-left { width: 40%; background: #f9fafb; padding: 30px; border-right: 1px solid #e5e7eb; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+        .preview-box { width: 100%; aspect-ratio: 4/3; border: 2px dashed #d1d5db; border-radius: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; background: white; position: relative; }
+        .preview-box.has-img { border: none; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .preview-img { width: 100%; height: 100%; object-fit: cover; transition: 0.3s; }
+        .empty-state { text-align: center; color: #9ca3af; }
+        .empty-icon { margin-bottom: 10px; color: #d1d5db; }
 
-        .modal-footer { padding: 20px 24px; border-top: 1px solid #e5e7eb; display: flex; justify-content: flex-end; gap: 12px; background: #f9fafb; }
-        .btn-cancel { padding: 10px 20px; border-radius: 8px; font-weight: 600; cursor: pointer; border: 1px solid #d1d5db; background: #fff; color: #374151; }
-        .btn-save { padding: 10px 20px; border-radius: 8px; font-weight: 600; cursor: pointer; border: none; background: #ef4444; color: #fff; display: flex; align-items: center; gap: 8px; }
-        .btn-save:hover { background: #dc2626; }
-        .btn-save:disabled { opacity: 0.7; cursor: not-allowed; }
+        /* RIGHT: FORM */
+        .modal-right { width: 60%; padding: 30px; overflow-y: auto; display: flex; flex-direction: column; }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
+        .modal-title { font-size: 22px; font-weight: 800; color: #111827; margin: 0; }
+        .btn-close { background: transparent; border: none; color: #9ca3af; cursor: pointer; transition: 0.2s; padding: 5px; border-radius: 50%; }
+        .btn-close:hover { background: #f3f4f6; color: #ef4444; }
 
-        @keyframes slideIn { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        /* FORM ELEMENTS */
+        .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .form-group { margin-bottom: 20px; }
+        .full-width { grid-column: 1 / -1; }
+        .form-label { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: #374151; margin-bottom: 8px; text-transform: uppercase; }
+        .form-input, .form-select, .form-textarea { width: 100%; padding: 12px 16px; border: 1px solid #e5e7eb; border-radius: 10px; outline: none; font-size: 14px; transition: 0.2s; background: #fff; box-sizing: border-box; }
+        .form-input:focus, .form-select:focus, .form-textarea:focus { border-color: #ef4444; box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.1); }
+        .form-textarea { resize: vertical; min-height: 100px; }
+
+        /* CATEGORY GRID STYLE */
+        .category-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            border: 1px solid #e5e7eb;
+            padding: 15px;
+            border-radius: 10px;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+        .cat-checkbox {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 6px;
+            transition: 0.2s;
+            border: 1px solid transparent;
+        }
+        .cat-checkbox:hover { background: #f3f4f6; }
+        .cat-checkbox.selected { background: #eff6ff; color: #2563eb; font-weight: 600; border-color: #bfdbfe; }
+
+        /* FOOTER */
+        .modal-actions { margin-top: auto; padding-top: 20px; border-top: 1px solid #f3f4f6; display: flex; justify-content: flex-end; gap: 12px; }
+        .btn { padding: 12px 24px; border-radius: 10px; font-weight: 700; cursor: pointer; border: none; display: flex; align-items: center; gap: 8px; transition: 0.2s; font-size: 14px; }
+        .btn-cancel { background: white; border: 1px solid #e5e7eb; color: #64748b; }
+        .btn-cancel:hover { background: #f9fafb; border-color: #d1d5db; }
+        .btn-submit { background: #ef4444; color: white; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2); }
+        .btn-submit:hover { background: #dc2626; transform: translateY(-2px); }
+        .btn-submit:disabled { opacity: 0.7; cursor: not-allowed; }
+
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
       `}</style>
 
       <div className="modal-container">
-        {/* Header */}
-        <div className="modal-header">
-          <h3 className="modal-title">
-            {editingFood ? 'Update Food Item' : 'Add New Food'}
-          </h3>
-          <button className="btn-close" onClick={onClose}>
-            <X size={24} />
-          </button>
+        {/* LEFT COLUMN: IMAGE PREVIEW */}
+        <div className="modal-left">
+          <div className={`preview-box ${previewImage ? 'has-img' : ''}`}>
+            {previewImage ? (
+              <img 
+                src={previewImage} 
+                alt="Food Preview" 
+                className="preview-img" 
+                onError={(e) => { e.target.src="https://placehold.co/400x300?text=Image+Error"; }} 
+              />
+            ) : (
+              <div className="empty-state">
+                <ImageIcon size={64} className="empty-icon" strokeWidth={1} />
+                <p style={{fontSize: 14, fontWeight: 600}}>No Image</p>
+                <p style={{fontSize: 12}}>Paste image URL to preview</p>
+              </div>
+            )}
+          </div>
+          <div style={{marginTop: 20, textAlign: 'center', color: '#6b7280', fontSize: 13}}>
+            <p>Tip: Use 4:3 or 16:9 images</p>
+            <p>for best display.</p>
+          </div>
         </div>
 
-        {/* Body */}
-        <div className="modal-body">
-          <form id="foodForm" onSubmit={handleSubmit}>
-            
-            {/* 1. Image URL Input */}
-            <div className="form-group">
-              <label className="form-label"><LinkIcon size={16}/> Image URL</label>
+        {/* RIGHT COLUMN: FORM */}
+        <div className="modal-right">
+          <div className="modal-header">
+            <h3 className="modal-title">{editingFood ? 'Edit Food' : 'Add New Food'}</h3>
+            <button onClick={onClose} className="btn-close"><X size={24}/></button>
+          </div>
+
+          <form id="foodForm" onSubmit={handleSubmit} className="form-grid">
+            {/* Name */}
+            <div className="form-group full-width">
+              <label className="form-label"><Utensils size={14}/> Food Name <span style={{color:'red'}}>*</span></label>
               <input 
-                type="text" 
-                name="image" 
+                name="name" 
                 className="form-input" 
-                placeholder="https://example.com/food-image.jpg" 
-                value={formData.image} 
+                placeholder="Ex: Special Beef Pho..." 
+                value={formData.name} 
                 onChange={handleChange} 
+                required 
               />
-              
-              {/* Image Preview Area */}
-              <div className="image-preview-box">
-                {formData.image ? (
-                  <img 
-                    src={formData.image} 
-                    alt="Preview" 
-                    className="preview-img" 
-                    onError={(e) => { e.target.onerror = null; e.target.src="https://via.placeholder.com/400x200?text=Invalid+Image+URL"; }}
-                  />
-                ) : (
-                  <div className="no-image-placeholder">
-                    <ImageIcon size={40} />
-                    <span>Enter a URL to preview image</span>
-                  </div>
-                )}
-              </div>
             </div>
 
-            {/* 2. Name & Price (2 columns) */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-              <div className="form-group">
-                <label className="form-label"><Utensils size={16}/> Name</label>
+            {/* Image Link */}
+            <div className="form-group full-width">
+              <label className="form-label"><LinkIcon size={14}/> Image URL</label>
+              <div style={{position: 'relative'}}>
                 <input 
-                  type="text" name="name" className="form-input" 
-                  placeholder="e.g. Beef Noodle Soup" 
-                  value={formData.name} onChange={handleChange} required 
+                  name="image" 
+                  className="form-input" 
+                  placeholder="https://example.com/food.jpg" 
+                  value={formData.image} 
+                  onChange={handleChange} 
                 />
-              </div>
-              <div className="form-group">
-                <label className="form-label"><DollarSign size={16}/> Price (VND)</label>
-                <input 
-                  type="number" name="price" className="form-input" 
-                  placeholder="e.g. 50000" 
-                  value={formData.price} onChange={handleChange} required 
-                />
+                <UploadCloud size={18} style={{position:'absolute', right:12, top:12, color:'#9ca3af'}}/>
               </div>
             </div>
 
-            {/* 3. Restaurant & Category (2 columns) */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-              <div className="form-group">
-                <label className="form-label"><Store size={16}/> Restaurant</label>
-                <select 
-                  name="restaurantId" className="form-select" 
-                  value={formData.restaurantId} onChange={handleChange} required
-                >
-                  <option value="">-- Select Restaurant --</option>
-                  {restaurants.map(res => (
-                    <option key={res.id} value={res.id}>{res.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="form-group">
-                <label className="form-label"><Layers size={16}/> Category</label>
-                <select 
-                  name="categoryId" className="form-select" 
-                  value={formData.categoryId} onChange={handleChange} required
-                >
-                  <option value="">-- Select Category --</option>
-                  {categories.map(cat => (
-                    <option key={cat.id} value={cat.id}>{cat.name}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* 4. Description */}
+            {/* Restaurant */}
             <div className="form-group">
-              <label className="form-label"><AlignLeft size={16}/> Description</label>
+              <label className="form-label"><Store size={14}/> Restaurant <span style={{color:'red'}}>*</span></label>
+              <select name="restaurantId" className="form-select" value={formData.restaurantId} onChange={handleChange} required>
+                <option value="">-- Select Restaurant --</option>
+                {restaurants.map(res => <option key={res.id} value={res.id}>{res.name}</option>)}
+              </select>
+            </div>
+
+            {/* Price */}
+            <div className="form-group">
+              <label className="form-label"><DollarSign size={14}/> Price (VND) <span style={{color:'red'}}>*</span></label>
+              <input 
+                type="number" 
+                name="price" 
+                className="form-input" 
+                placeholder="Enter price (Ex: 50000)" 
+                value={formData.price} 
+                onChange={handleChange} 
+                required 
+                min="0"
+              />
+            </div>
+
+            {/* Categories (Multi-Select) */}
+            <div className="form-group full-width">
+              <label className="form-label"><Layers size={14}/> Categories (Select multiple) <span style={{color:'red'}}>*</span></label>
+              <div className="category-grid">
+                {categories.map(cat => {
+                    const isSelected = formData.categoryIds.includes(cat.id);
+                    return (
+                        <div 
+                            key={cat.id} 
+                            className={`cat-checkbox ${isSelected ? 'selected' : ''}`}
+                            onClick={() => toggleCategory(cat.id)}
+                        >
+                            {isSelected ? <CheckSquare size={16} color="#2563eb"/> : <Square size={16} color="#9ca3af"/>}
+                            {cat.name}
+                        </div>
+                    )
+                })}
+              </div>
+              <div style={{fontSize: 11, color: '#6b7280', marginTop: 5}}>
+                  Selected: {formData.categoryIds.length} categories
+              </div>
+            </div>
+
+            {/* Description */}
+            <div className="form-group full-width">
+              <label className="form-label"><AlignLeft size={14}/> Description</label>
               <textarea 
-                name="description" className="form-textarea" rows="4"
-                placeholder="Ingredients, taste, etc..." 
-                value={formData.description} onChange={handleChange}
+                name="description" 
+                className="form-textarea" 
+                placeholder="Ingredients, taste, origin..." 
+                value={formData.description} 
+                onChange={handleChange}
               ></textarea>
             </div>
-
           </form>
-        </div>
 
-        {/* Footer */}
-        <div className="modal-footer">
-          <button type="button" className="btn-cancel" onClick={onClose}>Cancel</button>
-          <button type="submit" form="foodForm" className="btn-save" disabled={isLoading}>
-            {isLoading ? <Loader className="animate-spin" size={18} /> : <Save size={18} />}
-            {editingFood ? 'Save Changes' : 'Add Food'}
-          </button>
+          {/* ACTIONS */}
+          <div className="modal-actions">
+            <button type="button" className="btn btn-cancel" onClick={onClose}>Cancel</button>
+            <button type="submit" form="foodForm" className="btn btn-submit" disabled={isLoading}>
+              {isLoading ? <Loader className="animate-spin" size={18} /> : <Save size={18} />}
+              {editingFood ? 'Save Changes' : 'Create Food'}
+            </button>
+          </div>
         </div>
       </div>
     </div>

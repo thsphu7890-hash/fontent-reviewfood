@@ -1,65 +1,78 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
+import toast from 'react-hot-toast'; // Sử dụng toast thay vì alert
 
 const CartContext = createContext();
 
 export const CartProvider = ({ children }) => {
+  // Khởi tạo giỏ hàng từ LocalStorage
   const [cartItems, setCartItems] = useState(() => {
     const saved = localStorage.getItem('cart');
     return saved ? JSON.parse(saved) : [];
   });
 
+  // Tự động lưu vào LocalStorage mỗi khi giỏ hàng thay đổi
   useEffect(() => {
     localStorage.setItem('cart', JSON.stringify(cartItems));
   }, [cartItems]);
 
-  // --- 1. HÀM THÊM MỚI (NÂNG CẤP) ---
-  // Nhận vào: product (thông tin món), quantity (số lượng khách chọn), options (Object chứa size, đường, đá...)
+  // --- 1. HÀM THÊM VÀO GIỎ ---
   const addToCart = (product, quantity = 1, options = {}) => {
     setCartItems((prev) => {
-      // Tìm xem trong giỏ đã có món nào trùng ID VÀ trùng Options (Size) chưa
+      // Kiểm tra trùng lặp: Phải cùng ID và cùng tùy chọn (Size, Topping...)
       const existItemIndex = prev.findIndex((item) => 
         item.id === product.id && 
         JSON.stringify(item.options) === JSON.stringify(options)
       );
 
       if (existItemIndex !== -1) {
-        // TRƯỜNG HỢP 1: Đã có món y hệt (Cùng ID, cùng Size) -> Cộng dồn số lượng
+        // Nếu đã tồn tại món y hệt -> Tăng số lượng
         const newCart = [...prev];
-        newCart[existItemIndex].quantity += quantity; 
+        newCart[existItemIndex].quantity += quantity;
         return newCart;
       } else {
-        // TRƯỜNG HỢP 2: Món mới hoặc Size khác -> Thêm dòng mới
-        // Tạo một cartItemId riêng để phân biệt các dòng trong giỏ
+        // Nếu món mới hoặc tùy chọn khác -> Thêm dòng mới với ID duy nhất
         const newItem = { 
             ...product, 
-            quantity: quantity, 
-            options: options,
-            cartItemId: Date.now() + Math.random() // ID tạm thời cho dòng này trong giỏ
+            quantity, 
+            options,
+            cartItemId: Date.now() + Math.random() 
         };
         return [...prev, newItem];
       }
     });
-    alert(`Đã thêm ${quantity} x "${product.name}" vào giỏ!`);
+
+    // Thông báo Luxury bằng Toast
+    toast.success(`Đã thêm ${quantity} x ${product.name} vào giỏ!`, {
+        icon: '🛒',
+        style: {
+            borderRadius: '10px',
+            background: '#334155',
+            color: '#fff',
+        },
+    });
   };
 
-  // --- 2. HÀM XÓA (SỬA LẠI) ---
-  // Phải xóa theo cartItemId (ID dòng) chứ không xóa theo product.id
+  // --- 2. HÀM XÓA DÒNG SẢN PHẨM ---
   const removeFromCart = (cartItemId) => {
     setCartItems((prev) => prev.filter((item) => item.cartItemId !== cartItemId));
+    toast.error("Đã xóa món khỏi giỏ hàng");
   };
 
-  // --- 3. HÀM CẬP NHẬT SỐ LƯỢNG TRONG GIỎ (Tăng/Giảm) ---
+  // --- 3. HÀM CẬP NHẬT SỐ LƯỢNG (Tăng/Giảm) ---
   const updateQuantity = (cartItemId, newQuantity) => {
-    if (newQuantity < 1) return; // Không cho giảm dưới 1
+    if (newQuantity < 1) return; 
     setCartItems((prev) => 
         prev.map(item => item.cartItemId === cartItemId ? { ...item, quantity: newQuantity } : item)
     );
   };
 
-  const clearCart = () => setCartItems([]);
+  // --- 4. LÀM TRỐNG GIỎ HÀNG ---
+  const clearCart = () => {
+    setCartItems([]);
+    localStorage.removeItem('cart');
+  };
 
-  // --- 4. TÍNH TỔNG TIỀN ---
-  // Lưu ý: Giá product.price truyền vào phải là giá đã bao gồm phụ phí Size (nếu có)
+  // --- 5. TÍNH TỔNG TIỀN ---
   const totalPrice = cartItems.reduce((acc, item) => acc + item.price * item.quantity, 0);
 
   return (
@@ -67,7 +80,7 @@ export const CartProvider = ({ children }) => {
         cartItems, 
         addToCart, 
         removeFromCart, 
-        updateQuantity, // Xuất thêm hàm này để dùng ở trang Giỏ hàng
+        updateQuantity, 
         clearCart, 
         totalPrice 
     }}>
