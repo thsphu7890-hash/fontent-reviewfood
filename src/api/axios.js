@@ -2,13 +2,14 @@ import axios from 'axios';
 
 // Tạo instance axios với Base URL trỏ về Backend
 const instance = axios.create({
-    // Lưu ý: Nếu Backend bạn không có prefix /api thì xóa chữ /api đi
-    baseURL: 'http://localhost:8080/api', 
+    // SỬA Ở ĐÂY: Dùng biến môi trường, nếu không tìm thấy thì mới dùng localhost làm dự phòng
+    baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api', 
     headers: {
         'Content-Type': 'application/json',
     },
 });
 
+// --- Phần dưới giữ nguyên không đổi ---
 // Tự động gắn Token vào mỗi request (nếu có)
 instance.interceptors.request.use(
     (config) => {
