@@ -35,7 +35,7 @@ const SearchPage = () => {
 
   // Lấy danh mục để hiển thị bên Sidebar
   useEffect(() => {
-    api.get('/categories').then(res => setCategories(res.data)).catch(console.error);
+    api.get('api/categories').then(res => setCategories(res.data)).catch(console.error);
   }, []);
 
   // Reset trang về 0 khi bộ lọc thay đổi
@@ -48,7 +48,7 @@ const SearchPage = () => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        let endpoint = searchType === 'food' ? '/foods' : '/restaurants';
+        let endpoint = searchType === 'food' ? 'api/food' : 'api/restaurants';
         
         // Gọi API lấy tất cả
         const res = await api.get(endpoint, { params: { size: 1000 } });

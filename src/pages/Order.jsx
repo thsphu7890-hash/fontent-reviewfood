@@ -200,7 +200,7 @@ const Order = () => {
         items: cartItems.map(item => ({ foodId: item.id, quantity: item.quantity, price: item.price }))
       };
 
-      const res = await api.post('/orders', orderData);
+      const res = await api.post('/api/orders', orderData);
       const newOrderId = res.data.id || Date.now(); 
 
       if (paymentMethod === 'BANK') {

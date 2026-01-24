@@ -10,7 +10,7 @@ const AddFoodModal = ({ isOpen, onClose, onRefresh, editingFood }) => {
   const [formData, setFormData] = useState({
     name: '', price: '', description: '',
     restaurantId: '', 
-    categoryIds: [], // Changed to array to hold multiple IDs
+    categoryIds: [], 
     image: ''
   });
   
@@ -25,12 +25,12 @@ const AddFoodModal = ({ isOpen, onClose, onRefresh, editingFood }) => {
       const fetchData = async () => {
         try {
           const [resRes, catRes] = await Promise.all([
-            api.get('/restaurants'),
-            api.get('/categories')
+            api.get('/api/restaurants'),
+            api.get('/api/categories')
           ]);
           setRestaurants(resRes.data);
           setCategories(catRes.data);
-        } catch (error) { console.error("Error loading data:", error); }
+        } catch (error) { console.error("Lỗi tải dữ liệu:", error); }
       };
       fetchData();
     }
@@ -45,7 +45,6 @@ const AddFoodModal = ({ isOpen, onClose, onRefresh, editingFood }) => {
         price: editingFood.price || '',
         description: editingFood.description || '',
         restaurantId: editingFood.restaurantId || '',
-        // Map existing categories to an array of IDs
         categoryIds: editingFood.categories ? editingFood.categories.map(c => c.id) : [],
         image: editingFood.image || ''
       });
@@ -86,20 +85,20 @@ const AddFoodModal = ({ isOpen, onClose, onRefresh, editingFood }) => {
         ...formData,
         price: parseFloat(formData.price),
         restaurantId: parseInt(formData.restaurantId),
-        categoryIds: formData.categoryIds, // Send array of IDs
+        categoryIds: formData.categoryIds, 
       };
 
       if (editingFood) {
         // CALL EDIT API (PUT)
-        await api.put(`/foods/${editingFood.id}`, payload);
+        await api.put(`api/food/${editingFood.id}`, payload);
       } else {
         // CALL ADD API (POST)
-        await api.post('/foods', payload);
+        await api.post('api/food', payload);
       }
-      onRefresh(); // Refresh the list outside
+      onRefresh(); 
       onClose();
     } catch (error) {
-      alert("Error saving data: " + (error.response?.data?.message || error.message));
+      alert("Lỗi lưu dữ liệu: " + (error.response?.data?.message || error.message));
     } finally { setIsLoading(false); }
   };
 
@@ -180,39 +179,39 @@ const AddFoodModal = ({ isOpen, onClose, onRefresh, editingFood }) => {
             {previewImage ? (
               <img 
                 src={previewImage} 
-                alt="Food Preview" 
+                alt="Xem trước ảnh" 
                 className="preview-img" 
-                onError={(e) => { e.target.src="https://placehold.co/400x300?text=Image+Error"; }} 
+                onError={(e) => { e.target.src="https://placehold.co/400x300?text=Lỗi+Ảnh"; }} 
               />
             ) : (
               <div className="empty-state">
                 <ImageIcon size={64} className="empty-icon" strokeWidth={1} />
-                <p style={{fontSize: 14, fontWeight: 600}}>No Image</p>
-                <p style={{fontSize: 12}}>Paste image URL to preview</p>
+                <p style={{fontSize: 14, fontWeight: 600}}>Chưa có ảnh</p>
+                <p style={{fontSize: 12}}>Dán link ảnh để xem trước</p>
               </div>
             )}
           </div>
           <div style={{marginTop: 20, textAlign: 'center', color: '#6b7280', fontSize: 13}}>
-            <p>Tip: Use 4:3 or 16:9 images</p>
-            <p>for best display.</p>
+            <p>Mẹo: Sử dụng ảnh tỉ lệ 4:3 hoặc 16:9</p>
+            <p>để hiển thị đẹp nhất.</p>
           </div>
         </div>
 
         {/* RIGHT COLUMN: FORM */}
         <div className="modal-right">
           <div className="modal-header">
-            <h3 className="modal-title">{editingFood ? 'Edit Food' : 'Add New Food'}</h3>
+            <h3 className="modal-title">{editingFood ? 'Chỉnh sửa món ăn' : 'Thêm món mới'}</h3>
             <button onClick={onClose} className="btn-close"><X size={24}/></button>
           </div>
 
           <form id="foodForm" onSubmit={handleSubmit} className="form-grid">
             {/* Name */}
             <div className="form-group full-width">
-              <label className="form-label"><Utensils size={14}/> Food Name <span style={{color:'red'}}>*</span></label>
+              <label className="form-label"><Utensils size={14}/> Tên món ăn <span style={{color:'red'}}>*</span></label>
               <input 
                 name="name" 
                 className="form-input" 
-                placeholder="Ex: Special Beef Pho..." 
+                placeholder="VD: Phở bò đặc biệt..." 
                 value={formData.name} 
                 onChange={handleChange} 
                 required 
@@ -221,12 +220,12 @@ const AddFoodModal = ({ isOpen, onClose, onRefresh, editingFood }) => {
 
             {/* Image Link */}
             <div className="form-group full-width">
-              <label className="form-label"><LinkIcon size={14}/> Image URL</label>
+              <label className="form-label"><LinkIcon size={14}/> Đường dẫn ảnh (URL)</label>
               <div style={{position: 'relative'}}>
                 <input 
                   name="image" 
                   className="form-input" 
-                  placeholder="https://example.com/food.jpg" 
+                  placeholder="https://example.com/mon-an.jpg" 
                   value={formData.image} 
                   onChange={handleChange} 
                 />
@@ -236,21 +235,21 @@ const AddFoodModal = ({ isOpen, onClose, onRefresh, editingFood }) => {
 
             {/* Restaurant */}
             <div className="form-group">
-              <label className="form-label"><Store size={14}/> Restaurant <span style={{color:'red'}}>*</span></label>
+              <label className="form-label"><Store size={14}/> Nhà hàng <span style={{color:'red'}}>*</span></label>
               <select name="restaurantId" className="form-select" value={formData.restaurantId} onChange={handleChange} required>
-                <option value="">-- Select Restaurant --</option>
+                <option value="">-- Chọn nhà hàng --</option>
                 {restaurants.map(res => <option key={res.id} value={res.id}>{res.name}</option>)}
               </select>
             </div>
 
             {/* Price */}
             <div className="form-group">
-              <label className="form-label"><DollarSign size={14}/> Price (VND) <span style={{color:'red'}}>*</span></label>
+              <label className="form-label"><DollarSign size={14}/> Giá (VNĐ) <span style={{color:'red'}}>*</span></label>
               <input 
                 type="number" 
                 name="price" 
                 className="form-input" 
-                placeholder="Enter price (Ex: 50000)" 
+                placeholder="Nhập giá (VD: 50000)" 
                 value={formData.price} 
                 onChange={handleChange} 
                 required 
@@ -260,7 +259,7 @@ const AddFoodModal = ({ isOpen, onClose, onRefresh, editingFood }) => {
 
             {/* Categories (Multi-Select) */}
             <div className="form-group full-width">
-              <label className="form-label"><Layers size={14}/> Categories (Select multiple) <span style={{color:'red'}}>*</span></label>
+              <label className="form-label"><Layers size={14}/> Danh mục (Chọn nhiều) <span style={{color:'red'}}>*</span></label>
               <div className="category-grid">
                 {categories.map(cat => {
                     const isSelected = formData.categoryIds.includes(cat.id);
@@ -277,17 +276,17 @@ const AddFoodModal = ({ isOpen, onClose, onRefresh, editingFood }) => {
                 })}
               </div>
               <div style={{fontSize: 11, color: '#6b7280', marginTop: 5}}>
-                  Selected: {formData.categoryIds.length} categories
+                  Đã chọn: {formData.categoryIds.length} danh mục
               </div>
             </div>
 
             {/* Description */}
             <div className="form-group full-width">
-              <label className="form-label"><AlignLeft size={14}/> Description</label>
+              <label className="form-label"><AlignLeft size={14}/> Mô tả</label>
               <textarea 
                 name="description" 
                 className="form-textarea" 
-                placeholder="Ingredients, taste, origin..." 
+                placeholder="Thành phần, hương vị, nguồn gốc..." 
                 value={formData.description} 
                 onChange={handleChange}
               ></textarea>
@@ -296,10 +295,10 @@ const AddFoodModal = ({ isOpen, onClose, onRefresh, editingFood }) => {
 
           {/* ACTIONS */}
           <div className="modal-actions">
-            <button type="button" className="btn btn-cancel" onClick={onClose}>Cancel</button>
+            <button type="button" className="btn btn-cancel" onClick={onClose}>Hủy</button>
             <button type="submit" form="foodForm" className="btn btn-submit" disabled={isLoading}>
               {isLoading ? <Loader className="animate-spin" size={18} /> : <Save size={18} />}
-              {editingFood ? 'Save Changes' : 'Create Food'}
+              {editingFood ? 'Lưu thay đổi' : 'Tạo món mới'}
             </button>
           </div>
         </div>

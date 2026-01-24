@@ -53,7 +53,7 @@ const CategoryManager = () => {
   const fetchCategories = async () => {
     try {
       setLoading(true);
-      const response = await api.get('/categories');
+      const response = await api.get('/api/categories');
       const enrichedData = (Array.isArray(response.data) ? response.data : []).map(c => ({
           ...c,
           itemCount: Math.floor(Math.random() * 50) + 5
@@ -98,7 +98,7 @@ const CategoryManager = () => {
         setCategories(categories.map(cat => cat.id === editingCategory.id ? { ...cat, name: categoryName } : cat));
         showToast("Đã cập nhật thành công!", "success");
       } else {
-        const response = await api.post('/categories', { name: categoryName });
+        const response = await api.post('/api/categories', { name: categoryName });
         setCategories([{ ...response.data, itemCount: 0 }, ...categories]);
         showToast("Thêm mới thành công!", "success");
       }
@@ -111,7 +111,7 @@ const CategoryManager = () => {
   const handleDelete = async (id) => {
     if (window.confirm("Bạn chắc chắn muốn xóa danh mục này?")) {
       try {
-        await api.delete(`/categories/${id}`);
+        await api.delete(`/api/categories/${id}`);
         setCategories(categories.filter(c => c.id !== id));
         showToast("Đã xóa thành công!", "success");
       } catch (error) {

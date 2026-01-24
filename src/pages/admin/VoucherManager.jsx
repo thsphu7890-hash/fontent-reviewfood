@@ -18,7 +18,7 @@ const VoucherManager = () => {
   const fetchVouchers = async () => {
     try {
       setLoading(true);
-      const res = await api.get('/vouchers');
+      const res = await api.get('/api/vouchers');
       // Sắp xếp voucher mới nhất lên đầu
       const sortedData = res.data.sort((a, b) => b.id - a.id);
       setVouchers(sortedData);

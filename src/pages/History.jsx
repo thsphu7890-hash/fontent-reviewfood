@@ -28,7 +28,7 @@ const OrderHistory = () => {
     setLoading(true);
     try {
       // Gọi API (Axios sẽ tự lấy token gửi đi)
-      const res = await api.get('/orders/my-orders');
+      const res = await api.get('/api/orders/my-orders');
       
       const sortedOrders = Array.isArray(res.data) 
         ? res.data.sort((a, b) => new Date(b.createdAt || b.orderDate) - new Date(a.createdAt || a.orderDate))
@@ -52,7 +52,7 @@ const OrderHistory = () => {
   const handleCancelOrder = async (orderId) => {
     if (!window.confirm("Bạn muốn hủy đơn hàng này?")) return;
     try {
-      await api.put(`/orders/${orderId}/cancel`);
+      await api.put(`/api/orders/${orderId}/cancel`);
       toast.success("Đã hủy đơn hàng");
       fetchOrders(); 
     } catch (error) {

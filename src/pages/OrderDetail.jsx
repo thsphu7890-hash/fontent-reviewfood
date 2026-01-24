@@ -18,7 +18,7 @@ const OrderDetail = () => {
     const fetchOrderDetail = async () => {
       try {
         // Gọi API lấy chi tiết đơn hàng
-        const res = await api.get(`/orders/${id}`);
+        const res = await api.get(`/api/orders/${id}`);
         setOrder(res.data);
       } catch (error) {
         console.error("Lỗi tải đơn hàng:", error);

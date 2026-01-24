@@ -25,7 +25,7 @@ const EventPage = () => {
       try {
         // Gọi API: GET /api/events
         // (Nếu API của bạn là /public/events thì sửa lại đường dẫn nhé)
-        const res = await api.get('/events'); 
+        const res = await api.get('api/events'); 
         
         // Kiểm tra dữ liệu trả về để tránh lỗi
         const eventList = Array.isArray(res.data) ? res.data : (res.data.content || []);

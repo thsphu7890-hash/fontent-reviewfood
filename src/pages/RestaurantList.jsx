@@ -23,7 +23,7 @@ const RestaurantList = () => {
 
   useEffect(() => {
     setLoading(true);
-    api.get('/restaurants')
+    api.get('/api/restaurants')
       .then(res => {
         setRestaurants(res.data);
       })

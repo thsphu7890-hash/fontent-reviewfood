@@ -35,7 +35,7 @@ const DriverLogin = () => {
 
     try {
       // 2. Call API
-      const res = await api.post('/driver/login', null, { params: { phone } });
+      const res = await api.post('/api/driver/login', null, { params: { phone } });
       
       // 3. Success Handling
       localStorage.setItem('driverInfo', JSON.stringify(res.data));

@@ -19,7 +19,7 @@ const ReviewList = ({ foodId }) => {
       setLoading(true);
       try {
         // Gọi API Public (Ai cũng xem được)
-        const res = await api.get(`/reviews/food/${foodId}`);
+        const res = await api.get(api`/reviews/food/${foodId}`);
         const data = res.data;
         
         setReviews(data);

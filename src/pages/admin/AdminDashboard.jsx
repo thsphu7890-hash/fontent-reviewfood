@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, Utensils, Store, LogOut, Layers, Users, 
   ShieldAlert, ShoppingBag, Ticket, Truck, 
@@ -17,7 +17,8 @@ import {
   PieChart, Pie, Cell, Legend 
 } from 'recharts';
 
-// --- IMPORT CÁC COMPONENT QUẢN LÝ (Đảm bảo file tồn tại) ---
+// --- IMPORT CÁC COMPONENT QUẢN LÝ ---
+// (Giữ nguyên các import của bạn, nếu chưa có file thật thì dùng code giả ở bước trước)
 import RestaurantManager from './RestaurantManager';
 import FoodManager from './FoodManager';
 import CategoryManager from './CategoryManager';
@@ -43,11 +44,24 @@ const AdminDashboard = () => {
   const [revenueData, setRevenueData] = useState([]);
   const [statusData, setStatusData] = useState([]);
 
-  // --- KIỂM TRA QUYỀN ADMIN ---
-  // Lấy user từ localStorage (hoặc Context nếu bạn dùng)
+  // =========================================================================
+  // 👇👇👇 PHẦN SỬA LỖI QUYỀN ADMIN (QUAN TRỌNG) 👇👇👇
+  // =========================================================================
+  
   const user = JSON.parse(localStorage.getItem('user'));
-  // Kiểm tra Role linh hoạt (chấp nhận cả "ADMIN" và "ROLE_ADMIN")
-  const isAdmin = user?.role === 'ADMIN' || user?.role === 'ROLE_ADMIN';
+
+  // 1. In ra Console để kiểm tra (Nhấn F12 -> Console để xem dòng này)
+  console.log("🔍 ADMIN CHECK - User hiện tại trong Storage:", user);
+
+  // 2. Chuyển role về chữ hoa để so sánh (tránh lỗi 'admin' vs 'ADMIN')
+  const userRole = user?.role?.toUpperCase(); 
+  
+  // 3. Kiểm tra quyền
+  const isAdmin = userRole === 'ADMIN' || userRole === 'ROLE_ADMIN';
+
+  // =========================================================================
+  // 👆👆👆 HẾT PHẦN SỬA LỖI 👆👆👆
+  // =========================================================================
 
   // --- LOGIC XỬ LÝ DỮ LIỆU BIỂU ĐỒ ---
   const processChartData = (orders) => {
@@ -87,7 +101,6 @@ const AdminDashboard = () => {
 
     const revenueMap = {};
     orders.forEach(order => {
-      // Chỉ tính đơn thành công
       if (['COMPLETED', 'DONE'].includes(order.status)) {
         const dateKey = new Date(order.createdAt || order.orderDate).toLocaleDateString('vi-VN');
         revenueMap[dateKey] = (revenueMap[dateKey] || 0) + (order.totalPrice || 0);
@@ -96,8 +109,7 @@ const AdminDashboard = () => {
 
     const areaData = last7Days.map(date => {
       const dateKey = date.toLocaleDateString('vi-VN');
-      const dayLabel = date.toLocaleDateString('vi-VN', { weekday: 'short' }); // T2, T3...
-      // Chia cho 1 triệu để số đẹp hơn
+      const dayLabel = date.toLocaleDateString('vi-VN', { weekday: 'short' }); 
       const totalMillion = (revenueMap[dateKey] || 0) / 1000000; 
       
       return {
@@ -112,17 +124,17 @@ const AdminDashboard = () => {
   // --- GỌI API ---
   useEffect(() => {
     if (activeTab !== 'dashboard') return;
+    if (!isAdmin) return; // Nếu không phải admin thì không gọi API
 
     const fetchDashboardData = async () => {
       setLoading(true);
       try {
-        // Gọi song song các API đếm số lượng
         const [res, cat, food, usr, ord] = await Promise.all([
-          api.get('/restaurants').catch(() => ({ data: [] })), // catch lẻ để tránh sập toàn bộ nếu 1 cái lỗi
-          api.get('/categories').catch(() => ({ data: [] })),
-          api.get('/foods').catch(() => ({ data: { content: [] } })),
-          api.get('/users').catch(() => ({ data: [] })),
-          api.get('/orders').catch(() => ({ data: [] }))
+          api.get('/api/restaurants').catch(() => ({ data: [] })), 
+          api.get('/api/categories').catch(() => ({ data: [] })),
+          api.get('/api/food').catch(() => ({ data: { content: [] } })),
+          api.get('/api/users').catch(() => ({ data: [] })),
+          api.get('/api/orders').catch(() => ({ data: [] }))
         ]);
 
         setStats({
@@ -137,8 +149,10 @@ const AdminDashboard = () => {
 
       } catch (error) {
         console.error("Dashboard Error:", error);
-        if (error.response?.status === 401) {
+        if (error.response?.status === 401 || error.response?.status === 403) {
             toast.error("Phiên đăng nhập hết hạn");
+            // Tự động clear khi token lỗi
+            localStorage.clear();
             navigate('/login');
         }
       } finally {
@@ -147,21 +161,17 @@ const AdminDashboard = () => {
     };
 
     fetchDashboardData();
-  }, [activeTab, navigate]);
+  }, [activeTab, navigate, isAdmin]);
 
-  // --- XỬ LÝ ĐĂNG XUẤT (QUAN TRỌNG VỚI SESSION) ---
+  // --- XỬ LÝ ĐĂNG XUẤT ---
   const handleLogout = async () => {
     if (!window.confirm("Bạn có chắc chắn muốn đăng xuất?")) return;
-    
     try {
-        // 1. Gọi API để Server hủy Session
         await api.post('/users/logout'); 
     } catch (error) {
         console.error("Lỗi logout server:", error);
     } finally {
-        // 2. Xóa dữ liệu Client và chuyển trang
-        localStorage.removeItem('user');
-        localStorage.removeItem('token'); // Nếu còn sót lại
+        localStorage.clear(); // Xóa sạch mọi thứ
         toast.success("Đã đăng xuất");
         navigate('/login');
     }
@@ -187,14 +197,12 @@ const AdminDashboard = () => {
   // --- DASHBOARD HOME VIEW ---
   const renderDashboardHome = () => (
     <div className="dashboard-content animate-fade-in">
-      {/* Header Banner */}
       <div className="welcome-banner">
         <div className="welcome-text">
           <h1>Xin chào, Quản trị viên <Sparkles size={24} className="inline-icon" fill="#fbbf24" color="#fbbf24"/></h1>
           <p>Tổng quan tình hình kinh doanh hôm nay.</p>
         </div>
         <div className="header-actions">
-           {/* Nút giả lập bộ lọc */}
           <div className="time-filter">
             <button className={timeRange === 'week' ? 'active' : ''} onClick={() => setTimeRange('week')}>Tuần này</button>
             <button className={timeRange === 'month' ? 'active' : ''} onClick={() => setTimeRange('month')}>Tháng này</button>
@@ -210,7 +218,6 @@ const AdminDashboard = () => {
         </div>
       ) : (
         <>
-            {/* Stats Cards */}
             <div className="stats-grid">
                 {[
                 { label: 'DOANH THU', val: `${revenueData.reduce((a,b)=>a+b.total,0).toFixed(1)} Tr`, sub: 'Tổng thu thực tế', icon: <CreditCard />, color: 'blue-bg' },
@@ -229,9 +236,7 @@ const AdminDashboard = () => {
                 ))}
             </div>
 
-            {/* Charts Section */}
             <div className="charts-wrapper">
-                {/* Area Chart */}
                 <div className="chart-box main-chart">
                 <div className="card-header">
                     <h3>Biểu đồ doanh thu (7 ngày)</h3>
@@ -258,7 +263,6 @@ const AdminDashboard = () => {
                 </div>
                 </div>
 
-                {/* Pie Chart */}
                 <div className="chart-box pie-chart">
                 <h3>Trạng thái đơn hàng</h3>
                 <div style={{ width: '100%', height: 320 }}>
@@ -293,11 +297,24 @@ const AdminDashboard = () => {
       <div className="denied-screen">
         <ShieldAlert size={80} color="#ef4444" />
         <h1>TRUY CẬP BỊ TỪ CHỐI</h1>
-        <p>Tài khoản <b>{user?.username}</b> không có quyền truy cập trang quản trị.</p>
-        <div style={{display:'flex', gap: 10}}>
+        <p>Role hiện tại: <b>{userRole || 'Chưa đăng nhập'}</b> (Yêu cầu: ADMIN)</p>
+        
+        <div style={{display:'flex', gap: 10, marginTop: 20}}>
             <button onClick={() => navigate('/')} className="btn-back">Về trang chủ</button>
-            <button onClick={() => { localStorage.clear(); navigate('/login'); }} className="btn-logout">Đăng nhập lại</button>
+            
+            {/* 👇 NÚT NÀY QUAN TRỌNG: NÓ XÓA SẠCH DỮ LIỆU CŨ ĐỂ BẠN ĐĂNG NHẬP LẠI 👇 */}
+            <button 
+                onClick={() => { 
+                    localStorage.clear(); // Xóa sạch User cũ
+                    sessionStorage.clear();
+                    navigate('/login'); 
+                }} 
+                className="btn-logout"
+            >
+                ĐĂNG NHẬP LẠI (XÓA CACHE)
+            </button>
         </div>
+
         <style>{`
             .denied-screen { height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #fff; font-family: 'Inter', sans-serif; }
             .denied-screen h1 { color: #ef4444; margin: 20px 0 10px; }
@@ -310,46 +327,31 @@ const AdminDashboard = () => {
 
   return (
     <div className="admin-layout">
-      {/* GLOBAL STYLES (Giữ nguyên CSS của bạn nhưng gom gọn lại) */}
+      {/* CSS STYLES GIỮ NGUYÊN */}
       <style>{`
         .admin-layout { display: flex; min-height: 100vh; background: #F8FAFC; color: #1e293b; font-family: 'Inter', sans-serif; overflow: hidden; }
-        
-        /* SIDEBAR */
-        .sidebar { 
-            width: ${isSidebarOpen ? '260px' : '80px'}; 
-            background: #fff; border-right: 1px solid #e2e8f0; 
-            display: flex; flex-direction: column; transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            position: sticky; top: 0; height: 100vh; z-index: 100; box-shadow: 4px 0 24px rgba(0,0,0,0.02);
-        }
+        .sidebar { width: ${isSidebarOpen ? '260px' : '80px'}; background: #fff; border-right: 1px solid #e2e8f0; display: flex; flex-direction: column; transition: width 0.3s; position: sticky; top: 0; height: 100vh; z-index: 100; box-shadow: 4px 0 24px rgba(0,0,0,0.02); }
         .logo-box { height: 70px; display: flex; align-items: center; justify-content: ${isSidebarOpen ? 'space-between' : 'center'}; padding: 0 20px; border-bottom: 1px solid #f1f5f9; }
         .logo-text { font-size: 20px; font-weight: 800; display: ${isSidebarOpen ? 'block' : 'none'}; }
         .logo-text span { color: #ef4444; }
         .toggle-btn { cursor: pointer; color: #64748b; padding: 5px; border-radius: 6px; }
-        
         .nav-list { flex: 1; overflow-y: auto; padding: 20px 10px; scrollbar-width: none; }
         .nav-group-title { font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase; margin: 15px 10px 5px; display: ${isSidebarOpen ? 'block' : 'none'}; }
         .nav-item { display: flex; align-items: center; gap: 12px; padding: 12px 15px; border-radius: 10px; cursor: pointer; color: #64748b; font-weight: 500; transition: 0.2s; justify-content: ${isSidebarOpen ? 'flex-start' : 'center'}; }
         .nav-item:hover { background: #f1f5f9; color: #1e293b; }
         .nav-item.active { background: #fef2f2; color: #ef4444; font-weight: 700; }
         .nav-label { white-space: nowrap; display: ${isSidebarOpen ? 'block' : 'none'}; }
-
-        /* MAIN CONTENT */
         .main-viewport { flex: 1; display: flex; flex-direction: column; overflow: hidden; height: 100vh; }
         .top-bar { height: 70px; background: #fff; border-bottom: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between; padding: 0 30px; flex-shrink: 0; }
         .search-admin { display: flex; align-items: center; gap: 10px; background: #f8fafc; padding: 8px 16px; border-radius: 30px; width: 300px; border: 1px solid #e2e8f0; }
         .search-admin input { border: none; background: transparent; outline: none; width: 100%; font-size: 14px; }
-        
         .content-scroll { flex: 1; overflow-y: auto; padding: 30px; scrollbar-width: none; }
-        
-        /* DASHBOARD */
         .welcome-banner { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 30px; }
         .header-actions { display: flex; gap: 10px; }
         .btn-report { background: #1e293b; color: white; border: none; padding: 8px 16px; border-radius: 8px; font-weight: 600; display: flex; align-items: center; gap: 6px; cursor: pointer; }
-        
         .time-filter { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 4px; display: flex; }
         .time-filter button { border: none; background: transparent; padding: 6px 12px; font-size: 13px; font-weight: 600; color: #64748b; cursor: pointer; border-radius: 6px; }
         .time-filter button.active { background: #f1f5f9; color: #1e293b; }
-
         .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-bottom: 30px; }
         .stat-card { background: #fff; padding: 20px; border-radius: 16px; border: 1px solid #e2e8f0; display: flex; align-items: center; gap: 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.02); }
         .icon-wrapper { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; }
@@ -360,10 +362,8 @@ const AdminDashboard = () => {
         .stat-info .value { font-size: 22px; font-weight: 800; margin: 2px 0; color: #1e293b; }
         .trend { font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 2px; }
         .trend.positive { color: #10b981; }
-
         .charts-wrapper { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; }
         .chart-box { background: #fff; padding: 25px; border-radius: 16px; border: 1px solid #e2e8f0; }
-
         @keyframes fade-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         .animate-fade-in { animation: fade-in 0.4s ease-out forwards; }
       `}</style>
@@ -427,17 +427,13 @@ const AdminDashboard = () => {
                 <input placeholder="Tìm kiếm nhanh (Ctrl+K)..." />
             </div>
             <div className="admin-profile">
-                <div className="notif-btn">
-                    <Bell size={20} color="#64748b"/>
-                    <span className="dot"></span>
-                </div>
                 <div style={{display:'flex', alignItems:'center', gap: 10}}>
                     <div className="avatar" style={{width: 36, height: 36, background: '#ef4444', color: 'white', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold'}}>
                         {user?.fullName?.charAt(0) || 'A'}
                     </div>
                     <div style={{fontSize: 13}}>
                         <div style={{fontWeight: 600}}>{user?.fullName || 'Admin'}</div>
-                        <div style={{color: '#64748b', fontSize: 11}}>{user?.role}</div>
+                        <div style={{color: '#64748b', fontSize: 11}}>{userRole}</div>
                     </div>
                 </div>
             </div>

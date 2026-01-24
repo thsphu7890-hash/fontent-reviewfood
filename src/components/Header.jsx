@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { ShoppingCart, User, Search, LogOut, ClipboardList, Settings, ChevronDown, Bike, Home, BookOpen, Ticket, Gift, LayoutDashboard, List } from 'lucide-react';
+import { ShoppingCart, User, Search, LogOut, ClipboardList, Settings, ChevronDown, Bike, Home, BookOpen, Ticket, Gift, LayoutDashboard } from 'lucide-react';
 import { Link, useNavigate, useLocation } from 'react-router-dom'; 
 import { useCart } from '../context/CartContext';
 import DriverRegModal from './DriverRegModal';
@@ -11,7 +11,12 @@ const Header = () => {
   const location = useLocation();
   const { cartItems } = useCart();
   
-  const [user, setUser] = useState(null);
+  // 1. KHỞI TẠO USER TỪ LOCALSTORAGE (Để F5 không bị mất)
+  const [user, setUser] = useState(() => {
+    const savedUser = localStorage.getItem('user');
+    return savedUser ? JSON.parse(savedUser) : null;
+  });
+
   const [showDropdown, setShowDropdown] = useState(false);
   const [searchKeyword, setSearchKeyword] = useState("");
   const [isScrolled, setIsScrolled] = useState(false);
@@ -19,34 +24,35 @@ const Header = () => {
   
   const userRef = useRef(null);
 
-  // --- HELPER FUNCTION FOR AVATAR ---
+  // --- XỬ LÝ ẢNH AVATAR ---
   const getAvatarUrl = (path) => {
     if (!path) return null;
-    if (path.startsWith('http')) return path; // If Google/Facebook link
-    return `http://localhost:8080${path}`;    // If local upload
+    if (path.startsWith('http')) return path; // Ảnh Google/Facebook
+    return `http://localhost:8080${path}`;    // Ảnh Upload lên Server
   };
 
+  // --- LẤY THÔNG TIN USER MỚI NHẤT TỪ SERVER ---
   const fetchUserProfile = async () => {
-    const token = localStorage.getItem('token');
-    if (!token) return;
+    // Chỉ gọi nếu đã có user trong localStorage
+    if (!localStorage.getItem('user')) return;
+
     try {
-      const response = await api.get('/users/profile'); 
+      // Gọi API lấy profile (Session Cookie tự gửi đi)
+      const response = await api.get('api/users/profile'); 
       setUser(response.data);
+      // Cập nhật lại localStorage để đồng bộ
       localStorage.setItem('user', JSON.stringify(response.data));
     } catch (error) {
-      console.error("Error fetching user:", error);
-      if (error.response && error.response.status === 401) {
-          handleLogout();
-      }
+      console.warn("⚠️ Không đồng bộ được Profile từ Server (Có thể do Cookie chưa nhận), dùng data cũ.");
+      
+      // ❌❌❌ QUAN TRỌNG: ĐÃ XÓA ĐOẠN handleLogout() GÂY LỖI Ở ĐÂY ❌❌❌
+      // Trước đây: if (error... 403) -> handleLogout() -> Bị đá ra ngoài.
+      // Bây giờ: Chỉ log cảnh báo, giữ nguyên trạng thái đăng nhập của người dùng.
     }
   };
 
   useEffect(() => {
-    const savedUser = localStorage.getItem('user');
-    if (savedUser) {
-        setUser(JSON.parse(savedUser));
-    }
-    fetchUserProfile();
+    fetchUserProfile(); // Gọi update profile khi mount
 
     const handleScroll = () => setIsScrolled(window.scrollY > 20);
     const handleClickOutside = (event) => {
@@ -63,12 +69,23 @@ const Header = () => {
     };
   }, []);
 
-  const handleLogout = () => {
-    localStorage.removeItem('user');
-    localStorage.removeItem('token');
-    setUser(null);
-    setShowDropdown(false);
-    navigate('/login');
+  // --- XỬ LÝ ĐĂNG XUẤT ---
+  const handleLogout = async () => {
+    try {
+        // 1. Báo Server xóa Session
+        await api.post('api/auth/logout');
+    } catch (err) {
+        console.log("Lỗi logout server:", err);
+    } finally {
+        // 2. Xóa sạch Client
+        localStorage.removeItem('user');
+        localStorage.removeItem('token');
+        setUser(null);
+        setShowDropdown(false);
+        navigate('/login');
+        // Reload nhẹ để reset toàn bộ state của App
+        window.location.reload(); 
+    }
   };
 
   const handleSearch = (e) => {
@@ -121,7 +138,6 @@ const Header = () => {
           .hd-dropdown-item:hover { background: #374151; color: #ff4757; }
           .hd-dropdown-item.highlight { background: rgba(255, 71, 87, 0.1); color: #ff4757; font-weight: 600; }
 
-          /* Style cho nút Gift Mission */
           .mission-btn { position: relative; color: #fbbf24; background: rgba(251, 191, 36, 0.1); border: 1px solid rgba(251, 191, 36, 0.3); }
           .mission-btn:hover { background: rgba(251, 191, 36, 0.2); transform: translateY(-2px); }
           .dot-badge { position: absolute; top: 8px; right: 8px; width: 8px; height: 8px; background: #ef4444; border-radius: 50%; border: 1px solid #111827; }
@@ -147,13 +163,10 @@ const Header = () => {
           <div className="hd-actions">
             <div className="hd-driver-btn" onClick={() => setShowDriverForm(true)}><Bike /> <span>Đăng ký</span></div>
 
-            {/* --- COMPONENT THÔNG BÁO --- */}
             <NotificationDropdown />
-            {/* --------------------------- */}
 
             {user ? (
               <>
-                {/* 1. NÚT SĂN QUÀ (Mới thêm) */}
                 <Link to="/mission" className="hd-icon-btn mission-btn" title="Săn thưởng">
                    <Gift size={20} />
                    <span className="dot-badge"></span>
@@ -174,7 +187,6 @@ const Header = () => {
                     <ChevronDown size={12} color="#9ca3af" />
                   </div>
                   
-                  {/* DROPDOWN MENU */}
                   {showDropdown && (
                     <div className="hd-dropdown">
                       <div style={{padding: '15px 20px', borderBottom: '1px solid rgba(255,255,255,0.05)'}}>
@@ -182,15 +194,12 @@ const Header = () => {
                         <p style={{margin:0, color:'#9ca3af', fontSize:11}}>{user.email}</p>
                       </div>
 
-                      {/* Link DASHBOARD Mới (Nổi bật) */}
                       <Link to="/dashboard" className="hd-dropdown-item highlight">
                         <LayoutDashboard size={16} /> Tổng quan
                       </Link>
 
                       <Link to="/profile" className="hd-dropdown-item"><User size={16} /> Hồ sơ cá nhân</Link>
                       <Link to="/history" className="hd-dropdown-item"><ClipboardList size={16} /> Lịch sử đơn hàng</Link>
-                      
-                      {/* Link MISSION trong dropdown */}
                       <Link to="/mission" className="hd-dropdown-item"><Gift size={16} /> Nhiệm vụ & Quà</Link>
 
                       {user.role === 'ADMIN' && <Link to="/admin" className="hd-dropdown-item"><Settings size={16} /> Trang quản trị</Link>}

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Lock, User, ArrowRight, Loader2, UtensilsCrossed } from 'lucide-react'; 
 import toast from 'react-hot-toast';
-import api from '../../api/axios'; // Đảm bảo file axios này đúng (xem phần 2 bên dưới)
+import api from '../../api/axios'; 
 
 const Login = () => {
   const navigate = useNavigate();
@@ -21,65 +21,83 @@ const Login = () => {
     }
 
     setLoading(true);
-    // console.log("🚀 Đang gửi request login...", formData);
 
     try {
-      // 👇 QUAN TRỌNG: Đã sửa từ '/users/login' thành '/auth/login'
-      // Nếu Backend có tiền tố /api thì axios đã lo (xem file axios bên dưới)
-      const res = await api.post('/auth/login', {
+      // 1. GỌI LOGIN
+      const res = await api.post('/api/auth/login', {
         username: formData.username,
         password: formData.password
       });
 
-      console.log("✅ Phản hồi từ Server:", res.data);
+      console.log("🔍 LOGIN RESPONSE:", res.data); // Xem server trả về gì
 
-      // Tìm Token trong mọi ngóc ngách có thể
+      // 2. LẤY TOKEN (QUAN TRỌNG NHẤT)
+      // Backend có thể trả về 'token', 'accessToken' hoặc 'jwt'
       const token = res.data.token || res.data.accessToken || res.data.jwt;
-      
+
       if (!token) {
-          toast.error("Lỗi: Server không trả về Token!");
-          return;
+          throw new Error("Server không trả về Token đăng nhập!");
       }
 
-      // Xử lý Role
-      let role = 'USER';
-      if (res.data.role) {
-          const rawRole = JSON.stringify(res.data.role); 
-          if (rawRole.includes("ADMIN")) role = "ADMIN";
-          else if (rawRole.includes("DRIVER") || rawRole.includes("SHIPPER")) role = "DRIVER";
+      // ✅ LƯU TOKEN THẬT NGAY LẬP TỨC
+      localStorage.setItem('token', token); 
+
+      // 3. XÁC ĐỊNH USER VÀ ROLE
+      // Một số backend trả user luôn trong login, một số thì không
+      let userData = res.data.user || res.data; 
+
+      // Nếu trong login response chưa có role, gọi thêm API profile
+      // (Lúc này đã có token trong localStorage nên gọi sẽ thành công)
+      if (!userData.role && !userData.roles) {
+          try {
+              const profileRes = await api.get('/api/users/profile');
+              userData = { ...userData, ...profileRes.data };
+          } catch (err) {
+              console.warn("Không lấy được profile chi tiết, dùng thông tin cơ bản.");
+          }
       }
 
-      // Lưu vào LocalStorage
-      localStorage.setItem('token', token);
-      localStorage.setItem('user', JSON.stringify({
-        id: res.data.id || res.data.userId,
-        username: res.data.username,
-        fullName: res.data.fullName,
-        role: role,
-        avatar: res.data.avatar
-      }));
+      // 4. CHUẨN HÓA ROLE (Chuyển về ADMIN hoặc USER)
+      let role = "USER";
+      if (userData.role) {
+          role = userData.role.toUpperCase(); // Ví dụ: "admin" -> "ADMIN"
+      } else if (userData.roles && Array.isArray(userData.roles)) {
+          // Trường hợp Spring Security trả về mảng ["ROLE_ADMIN", "ROLE_USER"]
+          if (userData.roles.includes("ROLE_ADMIN") || userData.roles.includes("ADMIN")) {
+              role = "ADMIN";
+          }
+      }
 
-      toast.success("Đăng nhập thành công!");
-      
-      // Điều hướng dựa trên quyền
-      if (role === "ADMIN") {
+      // 5. LƯU USER ĐÃ CHUẨN HÓA
+      const finalUser = {
+          id: userData.id,
+          username: userData.username || formData.username,
+          fullName: userData.fullName || userData.username,
+          role: role, 
+          avatar: userData.avatar
+      };
+
+      localStorage.setItem('user', JSON.stringify(finalUser));
+      toast.success(`Xin chào, ${finalUser.fullName}!`);
+
+      // 6. ĐIỀU HƯỚNG
+      if (role === 'ADMIN' || role === 'ROLE_ADMIN') {
           navigate('/admin');
       } else {
           navigate('/');
       }
 
+      // Reload để cập nhật Header và Axios Interceptor
+      setTimeout(() => window.location.reload(), 100);
+
     } catch (error) {
-      console.error("❌ Lỗi Login:", error);
+      console.error("❌ Lỗi Đăng nhập:", error);
+      const msg = error.response?.data?.message || "Đăng nhập thất bại. Kiểm tra lại tài khoản!";
+      toast.error(msg);
       
-      if (error.code === "ERR_NETWORK") {
-          toast.error("Không kết nối được Server (Backend chưa chạy?)");
-      } else if (error.response) {
-          // Lấy thông báo lỗi chính xác từ Backend trả về
-          const msg = error.response.data?.message || "Sai tài khoản hoặc mật khẩu!";
-          toast.error(msg);
-      } else {
-          toast.error("Lỗi không xác định, vui lòng thử lại.");
-      }
+      // Xóa rác nếu lỗi
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
     } finally {
       setLoading(false);
     }

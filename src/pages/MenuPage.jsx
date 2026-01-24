@@ -57,7 +57,7 @@ const MenuPage = () => {
       setLoading(true);
       
       // 1. Lấy Categories
-      const resCat = await api.get('/categories');
+      const resCat = await api.get('api/categories');
       setCategories(resCat.data || []);
 
       // 2. Lấy Foods (Có phân trang & search)
@@ -68,7 +68,7 @@ const MenuPage = () => {
         categoryId: activeCat !== 'all' ? activeCat : undefined
       };
 
-      const resFood = await api.get('/foods', { params });
+      const resFood = await api.get('api/food', { params });
       
       let content = [];
       let total = 0;

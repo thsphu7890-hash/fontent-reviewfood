@@ -30,7 +30,7 @@ const EventManagement = () => {
   const fetchEvents = async () => {
     try {
       setLoading(true);
-      const res = await api.get('/events');
+      const res = await api.get('/api/events');
       setEvents(res.data);
     } catch (error) {
       console.error(error);
@@ -103,10 +103,10 @@ const EventManagement = () => {
     e.preventDefault();
     try {
       if (editingEvent) {
-        await api.put(`/events/${editingEvent.id}`, formData);
+        await api.put(`/api/events/${editingEvent.id}`, formData);
         toast.success("Cập nhật thành công!");
       } else {
-        await api.post('/events', formData);
+        await api.post('/api/events', formData);
         toast.success("Tạo sự kiện mới thành công!");
       }
       setIsModalOpen(false);

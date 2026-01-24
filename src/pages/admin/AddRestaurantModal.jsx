@@ -50,7 +50,7 @@ const AddRestaurantModal = ({ isOpen, onClose, onRefresh, editingData }) => {
 
   useEffect(() => {
     if (isOpen) {
-      api.get('/categories').then(res => setCategories(res.data)).catch(console.error);
+      api.get('api/categories').then(res => setCategories(res.data)).catch(console.error);
     }
   }, [isOpen]);
 
@@ -102,10 +102,10 @@ const AddRestaurantModal = ({ isOpen, onClose, onRefresh, editingData }) => {
       };
 
       if (editingData) {
-        await api.put(`/restaurants/${editingData.id}`, payload);
+        await api.put(`/api/restaurants/${editingData.id}`, payload);
         alert("Cập nhật thành công!");
       } else {
-        await api.post('/restaurants', payload);
+        await api.post('/api/restaurants', payload);
         alert("Thêm mới thành công!");
       }
       onRefresh(); 

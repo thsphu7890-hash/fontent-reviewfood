@@ -15,7 +15,7 @@ const DriverManager = () => {
   const fetchDrivers = async () => {
     try {
       setLoading(true);
-      const res = await api.get('/driver/all'); 
+      const res = await api.get('/api/driver/all'); 
       setDrivers(Array.isArray(res.data) ? res.data : []);
       // Không cần toast success ở đây vì đây là hành động load trang mặc định
     } catch (error) {
@@ -38,7 +38,7 @@ const DriverManager = () => {
     const loadId = toast.loading("Đang xử lý yêu cầu duyệt..."); 
 
     try {
-      await api.put(`/driver/approve/${id}`);
+      await api.put(`/api/driver/approve/${id}`);
       
       // Cập nhật toast thành success
       toast.success("Đã duyệt tài xế thành công!", { id: loadId }); 
@@ -58,7 +58,7 @@ const DriverManager = () => {
     const loadId = toast.loading("Đang khóa tài khoản...");
 
     try {
-      await api.put(`/driver/block/${id}`);
+      await api.put(`/api/driver/block/${id}`);
       
       // Cập nhật toast thành success
       toast.success("Đã khóa tài khoản thành công!", { id: loadId });

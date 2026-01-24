@@ -28,7 +28,7 @@ const RestaurantManager = () => {
   const fetchRestaurants = async () => {
     try {
       setLoading(true);
-      const response = await api.get('/restaurants');
+      const response = await api.get('api/restaurants');
       const enrichedData = response.data.map(r => ({
           ...r,
           status: r.status || 'ACTIVE' 

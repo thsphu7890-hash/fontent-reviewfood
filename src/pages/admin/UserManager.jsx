@@ -19,7 +19,7 @@ const UserManager = () => {
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      const res = await api.get('/users');
+      const res = await api.get('/api/users');
       // Đảm bảo dữ liệu luôn là mảng
       const dataArray = Array.isArray(res.data) ? res.data : (res.data?.content || []);
       setUsers(dataArray);
@@ -40,7 +40,7 @@ const UserManager = () => {
   const handleDelete = async (id) => {
     if (window.confirm("Bạn có chắc chắn muốn xóa tài khoản này?")) {
       try {
-        await api.delete(`/users/${id}`);
+        await api.delete(`/api/users/${id}`);
         toast.success("Đã xóa người dùng!");
         setUsers(users.filter(u => u.id !== id));
       } catch (error) {

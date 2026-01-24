@@ -3,7 +3,8 @@ import {
   Star, Trash2, MessageSquare, Search, Filter, 
   MoreVertical, Eye, EyeOff, CheckCircle, Reply, X
 } from 'lucide-react';
-// import api from '../../api/axios';
+import api from '../../api/axios'; // Import axios instance
+import { toast } from 'react-hot-toast'; // Dùng toast cho đẹp
 
 const ReviewManager = () => {
   const [reviews, setReviews] = useState([]);
@@ -17,59 +18,111 @@ const ReviewManager = () => {
   const [replyModal, setReplyModal] = useState({ open: false, reviewId: null, reviewContent: '' });
   const [replyText, setReplyText] = useState('');
 
-  // 1. Giả lập Fetch Data
-  useEffect(() => {
-    // Thay bằng: const res = await api.get('/admin/reviews');
-    setTimeout(() => {
-      setReviews([
-        { id: 1, user: "Nguyễn Văn A", avatar: "A", food: "Cơm tấm sườn", rating: 5, comment: "Ngon tuyệt vời, sườn nướng rất thơm!", date: "2023-10-20", isHidden: false, reply: "Cảm ơn bạn đã ủng hộ quán ạ! ❤️" },
-        { id: 2, user: "Trần Thị B", avatar: "T", food: "Trà sữa trân châu", rating: 3, comment: "Hơi ngọt quá so với khẩu vị của mình.", date: "2023-10-21", isHidden: false, reply: null },
-        { id: 3, user: "Lê Văn C", avatar: "L", food: "Bún bò Huế", rating: 1, comment: "Giao hàng chậm, nước dùng nguội lạnh.", date: "2023-10-22", isHidden: true, reply: null },
-        { id: 4, user: "Phạm D", avatar: "P", food: "Pizza Hải Sản", rating: 4, comment: "Bánh ngon nhưng hơi ít topping.", date: "2023-10-23", isHidden: false, reply: null },
-        { id: 5, user: "Hoàng E", avatar: "H", food: "Gà rán", rating: 5, comment: "Giòn rụm, nóng hổi. 10 điểm!", date: "2023-10-23", isHidden: false, reply: null },
-      ]);
+  // --- 1. GỌI API LẤY DANH SÁCH ---
+  const fetchReviews = async () => {
+    try {
+      setLoading(true);
+      const res = await api.get('/api/reviews'); // Hoặc '/api/admin/reviews' tùy backend của bạn
+      
+      // Map dữ liệu từ Backend về đúng form của Frontend (nếu cần)
+      // Giả sử Backend trả về: { id, user: { fullName: "A" }, food: { name: "Cơm" }, rating... }
+      const formattedData = Array.isArray(res.data) ? res.data.map(item => ({
+        id: item.id,
+        user: item.user?.fullName || item.username || "Khách ẩn danh",
+        avatar: (item.user?.fullName || "U").charAt(0).toUpperCase(),
+        food: item.food?.name || item.productName || "Món ăn",
+        rating: item.rating,
+        comment: item.comment,
+        date: new Date(item.createdAt).toLocaleDateString('vi-VN'),
+        isHidden: item.hidden, // Backend trả về hidden (true/false)
+        reply: item.reply // Backend trả về nội dung trả lời (nếu có)
+      })) : [];
+
+      setReviews(formattedData);
+    } catch (error) {
+      console.error("Lỗi tải đánh giá:", error);
+      toast.error("Không thể tải danh sách đánh giá.");
+    } finally {
       setLoading(false);
-    }, 500);
+    }
+  };
+
+  useEffect(() => {
+    fetchReviews();
   }, []);
 
-  // 2. Logic Lọc & Tìm kiếm
+  // --- 2. LOGIC LỌC & TÌM KIẾM ---
   const filteredReviews = reviews.filter(r => {
-    const matchSearch = r.user.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                        r.food.toLowerCase().includes(searchTerm.toLowerCase());
+    const searchLower = searchTerm.toLowerCase();
+    const matchSearch = r.user.toLowerCase().includes(searchLower) || 
+                        r.food.toLowerCase().includes(searchLower);
     const matchStar = filterStar === 'ALL' || r.rating === parseInt(filterStar);
     return matchSearch && matchStar;
   });
 
-  // 3. Các hành động
-  const handleDelete = (id) => {
-    if(window.confirm("Bạn chắc chắn muốn xóa vĩnh viễn đánh giá này?")) {
-      setReviews(reviews.filter(r => r.id !== id));
-      // api.delete(`/admin/reviews/${id}`);
+  // --- 3. CÁC HÀNH ĐỘNG API ---
+
+  // Xóa đánh giá
+  const handleDelete = async (id) => {
+    if(!window.confirm("Bạn chắc chắn muốn xóa vĩnh viễn đánh giá này?")) return;
+
+    try {
+      await api.delete(`/api/reviews/${id}`);
+      setReviews(prev => prev.filter(r => r.id !== id));
+      toast.success("Đã xóa đánh giá thành công!");
+    } catch (error) {
+      console.error(error);
+      toast.error("Lỗi khi xóa đánh giá.");
     }
   };
 
-  const handleToggleHidden = (id) => {
-    setReviews(reviews.map(r => r.id === id ? { ...r, isHidden: !r.isHidden } : r));
-    // api.put(`/admin/reviews/${id}/toggle-hidden`);
+  // Ẩn / Hiện đánh giá
+  const handleToggleHidden = async (id, currentStatus) => {
+    try {
+      // Gọi API cập nhật trạng thái (PUT hoặc PATCH)
+      await api.put(`/api/reviews/${id}/visibility`, { hidden: !currentStatus });
+      
+      // Cập nhật UI ngay lập tức
+      setReviews(prev => prev.map(r => r.id === id ? { ...r, isHidden: !r.isHidden } : r));
+      toast.success(currentStatus ? "Đã hiển thị đánh giá" : "Đã ẩn đánh giá");
+    } catch (error) {
+      console.error(error);
+      toast.error("Lỗi cập nhật trạng thái.");
+    }
   };
 
+  // Mở modal trả lời
   const openReplyModal = (review) => {
     setReplyModal({ open: true, reviewId: review.id, reviewContent: review.comment });
     setReplyText('');
   };
 
-  const handleSubmitReply = () => {
-    if (!replyText.trim()) return alert("Vui lòng nhập nội dung trả lời");
+  // Gửi trả lời
+  const handleSubmitReply = async () => {
+    if (!replyText.trim()) return toast.error("Vui lòng nhập nội dung trả lời");
     
-    setReviews(reviews.map(r => r.id === replyModal.reviewId ? { ...r, reply: replyText } : r));
-    // api.post(`/admin/reviews/${replyModal.reviewId}/reply`, { content: replyText });
-    
-    setReplyModal({ open: false, reviewId: null, reviewContent: '' });
-    alert("Đã gửi phản hồi thành công!");
+    try {
+      // Gọi API gửi trả lời
+      await api.post(`/api/reviews/${replyModal.reviewId}/reply`, { 
+        content: replyText 
+      });
+
+      // Cập nhật UI: Thêm reply vào đánh giá tương ứng
+      setReviews(prev => prev.map(r => r.id === replyModal.reviewId ? { ...r, reply: replyText } : r));
+      
+      // Đóng modal & Reset
+      setReplyModal({ open: false, reviewId: null, reviewContent: '' });
+      toast.success("Đã gửi phản hồi thành công!");
+    } catch (error) {
+      console.error(error);
+      toast.error("Gửi phản hồi thất bại.");
+    }
   };
 
   // 4. Thống kê nhanh
-  const avgRating = (reviews.reduce((acc, r) => acc + r.rating, 0) / (reviews.length || 1)).toFixed(1);
+  const avgRating = reviews.length > 0 
+    ? (reviews.reduce((acc, r) => acc + r.rating, 0) / reviews.length).toFixed(1) 
+    : 0;
 
   return (
     <div className="manager-container">
@@ -177,7 +230,7 @@ const ReviewManager = () => {
                             <MessageSquare size={18} />
                         </button>
                       )}
-                      <button className="btn-icon btn-hide" onClick={() => handleToggleHidden(review.id)} title={review.isHidden ? "Hiện lại" : "Ẩn đi"}>
+                      <button className="btn-icon btn-hide" onClick={() => handleToggleHidden(review.id, review.isHidden)} title={review.isHidden ? "Hiện lại" : "Ẩn đi"}>
                         {review.isHidden ? <EyeOff size={18} /> : <Eye size={18} />}
                       </button>
                       <button className="btn-icon btn-delete" onClick={() => handleDelete(review.id)} title="Xóa">

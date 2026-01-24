@@ -38,8 +38,8 @@ const RestaurantDetail = () => {
       try {
         setLoading(true);
         const [resDetail, resFoods] = await Promise.all([
-          api.get(`/restaurants/${id}`), 
-          api.get(`/foods/restaurant/${id}?size=100`) 
+          api.get(`/api/restaurants/${id}`), 
+          api.get(`/api/food/restaurant/${id}?size=100`) 
         ]);
 
         setRestaurant(resDetail.data);

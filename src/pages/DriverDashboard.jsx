@@ -52,7 +52,7 @@ const DriverDashboard = () => {
   const handleAcceptOrder = async (orderId) => {
     if (!window.confirm("Bạn chắc chắn muốn nhận đơn này?")) return;
     try {
-        await api.put(`/driver/accept/${orderId}/${CURRENT_DRIVER_ID}`);
+        await api.put(`/api/driver/accept/${orderId}/${CURRENT_DRIVER_ID}`);
         toast.success("Đã nhận đơn! Hãy di chuyển đến nhà hàng.");
         setActiveTab('current'); // Chuyển ngay sang tab Đang giao
     } catch (error) {
@@ -63,7 +63,7 @@ const DriverDashboard = () => {
   const handleCompleteOrder = async (orderId) => {
     if (!window.confirm("Xác nhận đã giao hàng thành công?")) return;
     try {
-        await api.put(`/driver/complete/${orderId}`);
+        await api.put(`/api/driver/complete/${orderId}`);
         toast.success("Tuyệt vời! Đơn hàng đã hoàn thành.");
         fetchOrders(); // Reload lại
     } catch (error) {

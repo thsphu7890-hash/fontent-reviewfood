@@ -56,7 +56,7 @@ const Profile = () => {
   const fetchOrders = async () => {
     setLoadingOrders(true);
     try {
-      const res = await api.get('/orders/my-orders');
+      const res = await api.get('/api/orders/my-orders');
       setOrders(res.data);
     } catch (error) {
       console.log("Chưa có API đơn hàng, dùng dữ liệu mẫu.");
@@ -84,7 +84,7 @@ const Profile = () => {
       formDataUpload.append('file', file);
       
       // API Upload
-      const res = await api.post(`/users/${user.id}/avatar`, formDataUpload, {
+      const res = await api.post(`api/users/${user.id}/avatar`, formDataUpload, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
 
@@ -106,7 +106,7 @@ const Profile = () => {
     e.preventDefault();
     setLoading(true);
     try {
-      await api.put(`/users/${user.id}`, {
+      await api.put(`api/users/${user.id}`, {
         fullName: formData.fullName,
         phone: formData.phone,
         address: formData.address
@@ -137,7 +137,7 @@ const Profile = () => {
 
     setLoading(true);
     try {
-      await api.put(`/users/change-password`, {
+      await api.put(`api/users/change-password`, {
         oldPassword: passData.currentPassword,
         newPassword: passData.newPassword
       });

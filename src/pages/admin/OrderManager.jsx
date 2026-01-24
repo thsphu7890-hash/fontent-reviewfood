@@ -1,30 +1,28 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import api from '../../api/axios';
 import { 
-  Eye, CheckCircle, XCircle, Truck, Clock, 
+  CheckCircle, XCircle, Truck, Clock, 
   Search, Package, Calendar, Download, 
-  ChevronLeft, ChevronRight, DollarSign, RefreshCw, 
-  MoreVertical, Printer, CheckSquare, Trash2
+  ChevronLeft, ChevronRight, RefreshCw, 
+  Printer, CheckSquare, MoreVertical, Eye, MapPin, Phone
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 import { useReactToPrint } from 'react-to-print';
 
-// Cấu hình Badge trạng thái
+// Cấu hình hiển thị trạng thái (Màu sắc & Label)
 const STATUS_CONFIG = {
-  PENDING:   { bg: 'bg-yellow-100', text: 'text-yellow-700', label: 'Chờ xử lý', icon: Clock },
-  CONFIRMED: { bg: 'bg-blue-100', text: 'text-blue-700', label: 'Đã duyệt', icon: CheckCircle },
-  SHIPPING:  { bg: 'bg-purple-100', text: 'text-purple-700', label: 'Đang giao', icon: Truck },
-  COMPLETED: { bg: 'bg-green-100', text: 'text-green-700', label: 'Hoàn thành', icon: Package },
-  CANCELLED: { bg: 'bg-red-100', text: 'text-red-700', label: 'Đã hủy', icon: XCircle },
+  PENDING:   { color: '#f59e0b', label: 'Chờ xử lý', icon: Clock, bg: '#fef3c7' },
+  CONFIRMED: { color: '#3b82f6', label: 'Đã duyệt', icon: CheckCircle, bg: '#dbeafe' },
+  SHIPPING:  { color: '#8b5cf6', label: 'Đang giao', icon: Truck, bg: '#ede9fe' },
+  COMPLETED: { color: '#10b981', label: 'Hoàn thành', icon: Package, bg: '#d1fae5' },
+  CANCELLED: { color: '#ef4444', label: 'Đã hủy', icon: XCircle, bg: '#fee2e2' },
 };
 
 const OrderManager = () => {
   // --- STATE ---
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
-  
-  // Filter & Pagination
   const [filterStatus, setFilterStatus] = useState('ALL');
   const [searchTerm, setSearchTerm] = useState('');
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
@@ -32,71 +30,39 @@ const OrderManager = () => {
   const itemsPerPage = 8;
 
   // Actions
-  const [selectedOrderIds, setSelectedOrderIds] = useState([]);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [activeMenuId, setActiveMenuId] = useState(null);
   
   const invoiceRef = useRef();
-  const dropdownRef = useRef(null);
 
   // --- API ---
   const fetchOrders = async () => {
     try {
       setLoading(true);
-      const res = await api.get('/orders'); 
+      const res = await api.get('/api/orders'); 
       setOrders(Array.isArray(res.data) ? res.data : []);
-      setSelectedOrderIds([]); 
     } catch (error) {
       console.error("Fetch Error:", error);
       toast.error("Không thể tải danh sách đơn hàng.");
-      setOrders([]);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchOrders();
-    // Click outside handler for dropdown
-    const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setActiveMenuId(null);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  useEffect(() => { fetchOrders(); }, []);
 
   // --- HANDLERS ---
   const handleUpdateStatus = async (id, newStatus) => {
-    const previousOrders = [...orders]; // Backup for rollback
-    // Optimistic UI Update
-    setOrders(prev => prev.map(o => o.id === id ? { ...o, status: newStatus } : o));
-    if (selectedOrder?.id === id) setSelectedOrder(prev => ({ ...prev, status: newStatus }));
-    setActiveMenuId(null);
-
     try {
-      await api.put(`/orders/${id}/status`, null, { params: { status: newStatus } });
-      toast.success(`Đơn #${id}: ${STATUS_CONFIG[newStatus].label}`);
+      // Optimistic Update
+      setOrders(prev => prev.map(o => o.id === id ? { ...o, status: newStatus } : o));
+      if (selectedOrder?.id === id) setSelectedOrder(prev => ({ ...prev, status: newStatus }));
+      
+      await api.put(`/api/orders/${id}/status`, null, { params: { status: newStatus } });
+      toast.success(`Đã cập nhật trạng thái đơn #${id}`);
     } catch (error) {
-      setOrders(previousOrders); // Rollback
+      fetchOrders(); // Revert nếu lỗi
       toast.error("Lỗi cập nhật trạng thái!");
-    }
-  };
-
-  const handleBulkUpdate = async (newStatus) => {
-    if (selectedOrderIds.length === 0) return;
-    if (!window.confirm(`Xác nhận cập nhật ${selectedOrderIds.length} đơn hàng sang trạng thái: ${STATUS_CONFIG[newStatus].label}?`)) return;
-
-    try {
-      await Promise.all(selectedOrderIds.map(id => 
-        api.put(`/orders/${id}/status`, null, { params: { status: newStatus } })
-      ));
-      toast.success(`Đã cập nhật ${selectedOrderIds.length} đơn hàng!`);
-      fetchOrders();
-    } catch (error) {
-      toast.error("Có lỗi xảy ra khi cập nhật hàng loạt.");
     }
   };
 
@@ -106,22 +72,17 @@ const OrderManager = () => {
   });
 
   const handleExport = () => {
-    if (processedData.allFilteredData.length === 0) return toast.error("Không có dữ liệu!");
-    
+    if (processedData.currentData.length === 0) return toast.error("Không có dữ liệu!");
     const dataToExport = processedData.allFilteredData.map(order => ({
       "Mã đơn": order.id,
       "Khách hàng": order.customerName,
-      "SĐT": order.phone,
-      "Địa chỉ": order.address,
-      "Ngày đặt": formatDate(order.createdAt),
       "Tổng tiền": order.totalAmount,
       "Trạng thái": STATUS_CONFIG[order.status]?.label || order.status
     }));
-
     const worksheet = XLSX.utils.json_to_sheet(dataToExport);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Orders");
-    XLSX.writeFile(workbook, `BaoCao_DonHang_${new Date().toISOString().slice(0,10)}.xlsx`);
+    XLSX.writeFile(workbook, `DonHang_${new Date().toISOString().slice(0,10)}.xlsx`);
     toast.success("Xuất file thành công!");
   };
 
@@ -132,352 +93,314 @@ const OrderManager = () => {
   // --- DATA PROCESSING ---
   const processedData = useMemo(() => {
     let data = [...orders];
-
-    // 1. Filter Search
     if (searchTerm) {
       const lower = searchTerm.toLowerCase();
-      data = data.filter(o => 
-        String(o.id).includes(lower) || 
-        o.customerName?.toLowerCase().includes(lower) ||
-        o.phone?.includes(lower)
-      );
+      data = data.filter(o => String(o.id).includes(lower) || o.customerName?.toLowerCase().includes(lower) || o.phone?.includes(lower));
     }
-
-    // 2. Filter Status
-    if (filterStatus !== 'ALL') {
-      data = data.filter(o => o.status === filterStatus);
-    }
-
-    // 3. Filter Date
-    if (dateRange.start) {
-      data = data.filter(o => new Date(o.createdAt) >= new Date(dateRange.start));
-    }
+    if (filterStatus !== 'ALL') data = data.filter(o => o.status === filterStatus);
+    if (dateRange.start) data = data.filter(o => new Date(o.createdAt) >= new Date(dateRange.start));
     if (dateRange.end) {
       const endDate = new Date(dateRange.end);
       endDate.setHours(23, 59, 59, 999);
       data = data.filter(o => new Date(o.createdAt) <= endDate);
     }
-
-    // 4. Sort (Mới nhất lên đầu)
     data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-
-    // 5. Pagination
+    
     const totalPages = Math.ceil(data.length / itemsPerPage) || 1;
     const validPage = Math.min(currentPage, totalPages);
     if (validPage !== currentPage && validPage > 0) setCurrentPage(validPage);
     
     const currentData = data.slice((validPage - 1) * itemsPerPage, validPage * itemsPerPage);
-    
-    // Stats
-    const totalRevenue = data.reduce((sum, o) => o.status === 'COMPLETED' ? sum + (Number(o.totalAmount) || 0) : sum, 0);
-
-    return { total: data.length, totalPages, currentData, totalRevenue, pendingCount: orders.filter(o => o.status === 'PENDING').length, allFilteredData: data };
+    return { total: data.length, totalPages, currentData, allFilteredData: data };
   }, [orders, searchTerm, filterStatus, dateRange, currentPage]);
 
-  // Checkbox logic
-  const toggleSelectAll = () => {
-    const currentIds = processedData.currentData.map(o => o.id);
-    const allSelected = currentIds.every(id => selectedOrderIds.includes(id));
-    
-    if (allSelected) {
-      setSelectedOrderIds(prev => prev.filter(id => !currentIds.includes(id)));
-    } else {
-      setSelectedOrderIds(prev => [...new Set([...prev, ...currentIds])]);
-    }
-  };
 
   return (
-    <div className="min-h-screen bg-slate-50 p-6 font-sans text-slate-800">
-      
-      {/* 1. DASHBOARD STATS */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
-        <StatCard 
-          icon={<Package />} color="bg-blue-50 text-blue-600" 
-          label="Tổng đơn hàng" value={processedData.total} 
-        />
-        <StatCard 
-          icon={<DollarSign />} color="bg-green-50 text-green-600" 
-          label="Doanh thu thực tế" value={formatPrice(processedData.totalRevenue)} 
-        />
-        <StatCard 
-          icon={<Clock />} color="bg-yellow-50 text-yellow-600" 
-          label="Đơn chờ xử lý" value={processedData.pendingCount} 
-        />
-        <div 
-          onClick={fetchOrders}
-          className="bg-white p-5 rounded-xl border border-dashed border-blue-300 cursor-pointer hover:bg-blue-50 transition-colors flex items-center gap-4 group"
-        >
-          <div className={`w-12 h-12 rounded-lg bg-slate-100 text-slate-500 flex items-center justify-center group-hover:text-blue-600 ${loading ? 'animate-spin' : ''}`}>
-            <RefreshCw size={24} />
-          </div>
-          <div>
-            <div className="text-xs font-bold text-slate-500 uppercase">Cập nhật</div>
-            <div className="text-sm font-semibold text-blue-600 mt-1">Làm mới dữ liệu</div>
-          </div>
+    <div className="mgr-container">
+      {/* --- INJECT CSS STYLE CỦA BẠN --- */}
+      <style>{`
+        .mgr-container { padding: 30px; font-family: 'Inter', sans-serif; color: #1f2937; background: #f3f4f6; min-height: 100vh; }
+        
+        /* HEADER */
+        .mgr-header { margin-bottom: 30px; display: flex; justify-content: space-between; align-items: flex-end; }
+        .mgr-title h2 { font-size: 28px; font-weight: 800; color: #111827; margin: 0; letter-spacing: -0.5px; }
+        .mgr-title p { color: #6b7280; font-size: 15px; margin-top: 6px; }
+
+        /* TOOLBAR */
+        .mgr-toolbar { 
+            display: flex; gap: 15px; align-items: center; background: white; flex-wrap: wrap;
+            padding: 15px 20px; border-radius: 16px; margin-bottom: 30px; 
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+            border: 1px solid rgba(229, 231, 235, 0.5);
+        }
+        .search-box { position: relative; flex: 1; min-width: 200px; }
+        .search-input { width: 100%; padding: 12px 12px 12px 45px; border: 1px solid #e5e7eb; border-radius: 12px; outline: none; font-size: 14px; transition: 0.2s; background: #f9fafb; box-sizing: border-box; }
+        .search-input:focus { border-color: #6366f1; background: white; box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1); }
+        
+        .filter-select { padding: 11px 15px; border: 1px solid #e5e7eb; border-radius: 12px; outline: none; background: white; cursor: pointer; font-size: 14px; color: #4b5563; font-weight: 500; min-width: 140px; }
+        
+        .btn-tool { background: white; color: #374151; border: 1px solid #e5e7eb; padding: 11px 16px; border-radius: 12px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: 0.2s; font-size: 14px; }
+        .btn-tool:hover { background: #f3f4f6; border-color: #d1d5db; }
+        .btn-primary { background: #111827; color: white; border: none; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .btn-primary:hover { background: #2563eb; transform: translateY(-1px); }
+
+        /* --- CARD STYLE (CUSTOM FOR ORDERS) --- */
+        .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 25px; }
+        
+        .food-card { 
+            background: white; border-radius: 20px; overflow: hidden; 
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
+            display: flex; flex-direction: column; position: relative;
+            border: 1px solid rgba(0,0,0,0.04);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+            height: 100%;
+        }
+        .food-card:hover { 
+            transform: translateY(-5px); 
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            border-color: #e5e7eb;
+        }
+
+        /* HEADER CARD (Thay cho ảnh món ăn) */
+        .card-img-wrapper { 
+            position: relative; width: 100%; height: 100px; 
+            display: flex; align-items: center; justify-content: center;
+            overflow: hidden; 
+        }
+        .status-bg-icon { opacity: 0.15; transform: scale(3) rotate(-15deg); }
+        
+        .price-badge { 
+            position: absolute; top: 15px; right: 15px; 
+            background: rgba(255, 255, 255, 0.95); 
+            padding: 6px 12px; border-radius: 30px; 
+            font-weight: 800; color: #111827; font-size: 14px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            backdrop-filter: blur(4px);
+        }
+
+        /* Nội dung card */
+        .card-body { padding: 20px; flex: 1; display: flex; flex-direction: column; }
+        
+        .card-tags { display: flex; gap: 8px; margin-bottom: 12px; }
+        .cat-pill { 
+            font-size: 11px; font-weight: 700; 
+            padding: 4px 10px; border-radius: 20px; text-transform: uppercase; letter-spacing: 0.5px;
+            display: inline-flex; align-items: center; gap: 4px;
+        }
+
+        .card-title { font-weight: 800; color: #111827; margin-bottom: 4px; font-size: 18px; line-height: 1.4; }
+        .card-subtitle { font-size: 13px; color: #6b7280; font-family: monospace; margin-bottom: 12px; }
+        
+        .card-info-row { font-size: 13px; color: #4b5563; display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+        
+        /* Nút hành động */
+        .card-actions { margin-top: auto; padding-top: 15px; border-top: 1px dashed #e5e7eb; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .btn-action { 
+            padding: 10px; border-radius: 10px; border: none; cursor: pointer; 
+            display: flex; align-items: center; justify-content: center; gap: 6px; 
+            font-size: 13px; font-weight: 600; transition: 0.2s; 
+        }
+        .btn-view { background: #f3f4f6; color: #374151; }
+        .btn-view:hover { background: #e5e7eb; color: #111827; }
+        
+        /* PAGINATION */
+        .pagination { display: flex; justify-content: center; margin-top: 40px; gap: 8px; }
+        .page-btn { width: 40px; height: 40px; border: 1px solid #e5e7eb; background: white; border-radius: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: 0.2s; font-weight: 600; color: #4b5563; }
+        .page-btn.active { background: #111827; color: white; border-color: #111827; }
+        .page-btn:hover:not(.active):not(:disabled) { border-color: #6366f1; color: #6366f1; }
+        .page-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* MODAL (GIỮ NGUYÊN) */
+        .modal-overlay { fixed inset-0 bg-black/50 z-50 flex items-center justify-center; }
+      `}</style>
+
+      {/* HEADER */}
+      <div className="mgr-header">
+        <div className="mgr-title">
+            <h2>Quản lý đơn hàng</h2>
+            <p>Theo dõi và cập nhật trạng thái đơn hàng của cửa hàng</p>
         </div>
       </div>
 
-      {/* 2. TOOLBAR */}
-      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm mb-6 flex flex-col md:flex-row items-center justify-between gap-4">
-        <div className="flex flex-1 items-center gap-3 w-full md:w-auto">
-          <div className="relative w-full md:w-80">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+      {/* TOOLBAR */}
+      <div className="mgr-toolbar">
+        <div className="search-box">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
             <input 
-              className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none text-sm transition-all"
-              placeholder="Tìm theo Mã đơn, Tên, SĐT..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+                className="search-input" 
+                placeholder="Tìm Mã đơn, Tên, SĐT..." 
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
             />
-          </div>
-          <div className="hidden md:flex items-center gap-2 bg-slate-50 px-3 py-2 rounded-lg border border-slate-200 h-[42px]">
-            <Calendar size={16} className="text-slate-500" />
-            <input type="date" className="bg-transparent border-none outline-none text-xs text-slate-600 font-medium" value={dateRange.start} onChange={(e) => setDateRange({...dateRange, start: e.target.value})} />
-            <span className="text-slate-300">|</span>
-            <input type="date" className="bg-transparent border-none outline-none text-xs text-slate-600 font-medium" value={dateRange.end} onChange={(e) => setDateRange({...dateRange, end: e.target.value})} />
-          </div>
         </div>
-        <button onClick={handleExport} className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
-          <Download size={16} /> Xuất Excel
-        </button>
+
+        <select 
+            className="filter-select"
+            value={filterStatus}
+            onChange={(e) => { setFilterStatus(e.target.value); setCurrentPage(1); }}
+        >
+            <option value="ALL">Tất cả trạng thái</option>
+            <option value="PENDING">Chờ xử lý</option>
+            <option value="CONFIRMED">Đã duyệt</option>
+            <option value="SHIPPING">Đang giao</option>
+            <option value="COMPLETED">Hoàn thành</option>
+            <option value="CANCELLED">Đã hủy</option>
+        </select>
+
+        <button onClick={fetchOrders} className="btn-tool" title="Làm mới"><RefreshCw size={18}/></button>
+        <button onClick={handleExport} className="btn-tool btn-primary"><Download size={18}/> Xuất Excel</button>
       </div>
 
-      {/* 3. BULK ACTIONS */}
-      {selectedOrderIds.length > 0 && (
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 mb-6 flex flex-wrap items-center justify-between animate-fade-in">
-          <div className="flex items-center gap-2 text-blue-800 font-semibold px-2">
-            <CheckSquare size={20}/> Đã chọn {selectedOrderIds.length} đơn
-          </div>
-          <div className="flex gap-2">
-            <BulkBtn label="Duyệt" color="text-blue-600 border-blue-200 hover:bg-blue-100" onClick={() => handleBulkUpdate('CONFIRMED')} />
-            <BulkBtn label="Giao hàng" color="text-purple-600 border-purple-200 hover:bg-purple-100" onClick={() => handleBulkUpdate('SHIPPING')} />
-            <BulkBtn label="Hoàn thành" color="text-green-600 border-green-200 hover:bg-green-100" onClick={() => handleBulkUpdate('COMPLETED')} />
-            <BulkBtn label="Hủy" color="text-red-600 border-red-200 hover:bg-red-100" onClick={() => handleBulkUpdate('CANCELLED')} />
-          </div>
-        </div>
-      )}
-
-      {/* 4. TABS & TABLE */}
-      <div className="flex gap-2 overflow-x-auto pb-2 mb-4 scrollbar-hide">
-        {['ALL', 'PENDING', 'CONFIRMED', 'SHIPPING', 'COMPLETED', 'CANCELLED'].map(status => (
-          <button 
-            key={status} 
-            onClick={() => { setFilterStatus(status); setCurrentPage(1); }}
-            className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all border ${
-              filterStatus === status 
-                ? 'bg-slate-800 text-white border-slate-800 shadow-lg shadow-slate-200' 
-                : 'bg-white text-slate-500 border-transparent hover:bg-slate-100'
-            }`}
-          >
-            {{ALL: 'Tất cả', PENDING: 'Chờ xử lý', CONFIRMED: 'Đã duyệt', SHIPPING: 'Đang giao', COMPLETED: 'Hoàn thành', CANCELLED: 'Đã hủy'}[status]}
-          </button>
-        ))}
-      </div>
-
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-500 uppercase tracking-wider">
-                <th className="p-4 w-12 text-center">
-                  <input type="checkbox" 
-                    onChange={toggleSelectAll}
-                    checked={processedData.currentData.length > 0 && processedData.currentData.every(o => selectedOrderIds.includes(o.id))}
-                    className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                  />
-                </th>
-                <th className="p-4">Mã đơn</th>
-                <th className="p-4">Khách hàng</th>
-                <th className="p-4">Ngày đặt</th>
-                <th className="p-4">Tổng tiền</th>
-                <th className="p-4">Trạng thái</th>
-                <th className="p-4 text-right">Thao tác</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {processedData.currentData.length > 0 ? processedData.currentData.map(order => {
+      {/* CARD GRID (THAY CHO TABLE) */}
+      <div className="card-grid">
+        {processedData.currentData.length > 0 ? (
+            processedData.currentData.map(order => {
                 const statusCfg = STATUS_CONFIG[order.status] || STATUS_CONFIG.PENDING;
                 const StatusIcon = statusCfg.icon;
-                return (
-                  <tr key={order.id} className={`hover:bg-slate-50 transition-colors ${selectedOrderIds.includes(order.id) ? 'bg-blue-50/50' : ''}`}>
-                    <td className="p-4 text-center">
-                      <input type="checkbox" 
-                        checked={selectedOrderIds.includes(order.id)} 
-                        onChange={() => setSelectedOrderIds(prev => prev.includes(order.id) ? prev.filter(id => id !== order.id) : [...prev, order.id])}
-                        className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                      />
-                    </td>
-                    <td className="p-4">
-                      <span className="font-mono font-bold text-slate-700 bg-slate-100 px-2 py-1 rounded text-xs">#{order.id}</span>
-                    </td>
-                    <td className="p-4">
-                      <div className="font-semibold text-slate-700">{order.customerName}</div>
-                      <div className="text-xs text-slate-500">{order.phone}</div>
-                    </td>
-                    <td className="p-4 text-sm text-slate-600">{formatDate(order.createdAt)}</td>
-                    <td className="p-4 font-bold text-slate-800">{formatPrice(order.totalAmount)}</td>
-                    <td className="p-4">
-                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold ${statusCfg.bg} ${statusCfg.text}`}>
-                        <StatusIcon size={12} /> {statusCfg.label}
-                      </span>
-                    </td>
-                    <td className="p-4 text-right relative">
-                      <button 
-                        onClick={(e) => { e.stopPropagation(); setActiveMenuId(activeMenuId === order.id ? null : order.id); }}
-                        className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
-                      >
-                        <MoreVertical size={18} />
-                      </button>
-                      
-                      {/* Dropdown Menu */}
-                      {activeMenuId === order.id && (
-                        <div ref={dropdownRef} className="absolute right-10 top-2 w-40 bg-white border border-slate-200 rounded-lg shadow-xl z-50 overflow-hidden animate-in fade-in zoom-in duration-200 origin-top-right">
-                          <MenuItem icon={<Eye size={14}/>} label="Xem chi tiết" onClick={() => { setSelectedOrder(order); setIsModalOpen(true); setActiveMenuId(null); }} />
-                          <div className="h-px bg-slate-100 my-1"></div>
-                          {order.status === 'PENDING' && <MenuItem icon={<CheckCircle size={14}/>} label="Duyệt đơn" color="text-blue-600" onClick={() => handleUpdateStatus(order.id, 'CONFIRMED')} />}
-                          {order.status === 'CONFIRMED' && <MenuItem icon={<Truck size={14}/>} label="Giao hàng" color="text-purple-600" onClick={() => handleUpdateStatus(order.id, 'SHIPPING')} />}
-                          {order.status === 'SHIPPING' && <MenuItem icon={<Package size={14}/>} label="Hoàn thành" color="text-green-600" onClick={() => handleUpdateStatus(order.id, 'COMPLETED')} />}
-                          {!['CANCELLED', 'COMPLETED'].includes(order.status) && <MenuItem icon={<XCircle size={14}/>} label="Hủy đơn" color="text-red-600" onClick={() => handleUpdateStatus(order.id, 'CANCELLED')} />}
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                );
-              }) : (
-                <tr>
-                  <td colSpan="7" className="p-10 text-center text-slate-400">
-                    <div className="flex flex-col items-center justify-center">
-                      <Package size={48} className="mb-2 opacity-20" />
-                      <p>Không tìm thấy đơn hàng nào.</p>
-                    </div>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
 
-        {/* Pagination */}
-        {processedData.totalPages > 1 && (
-          <div className="flex items-center justify-between px-6 py-4 bg-white border-t border-slate-100">
-            <span className="text-sm text-slate-500">Trang <b>{currentPage}</b> / <b>{processedData.totalPages}</b></span>
-            <div className="flex gap-2">
-              <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} className="w-8 h-8 flex items-center justify-center rounded border border-slate-200 hover:bg-slate-50 disabled:opacity-50"><ChevronLeft size={16}/></button>
-              <button disabled={currentPage === processedData.totalPages} onClick={() => setCurrentPage(p => p + 1)} className="w-8 h-8 flex items-center justify-center rounded border border-slate-200 hover:bg-slate-50 disabled:opacity-50"><ChevronRight size={16}/></button>
+                return (
+                    <div key={order.id} className="food-card">
+                        {/* Header màu sắc thay cho Ảnh */}
+                        <div className="card-img-wrapper" style={{background: statusCfg.bg}}>
+                            <StatusIcon size={80} color={statusCfg.color} className="status-bg-icon"/>
+                            <div className="price-badge">{formatPrice(order.totalAmount)}</div>
+                            <div style={{position: 'absolute', bottom: 10, left: 15, fontWeight: 700, color: statusCfg.color, display: 'flex', alignItems: 'center', gap: 5}}>
+                                <StatusIcon size={16}/> {statusCfg.label}
+                            </div>
+                        </div>
+
+                        <div className="card-body">
+                            <div className="card-tags">
+                                <span className="cat-pill" style={{background: '#f3f4f6', color: '#6b7280'}}>
+                                    COD
+                                </span>
+                                <span className="cat-pill" style={{background: '#f3f4f6', color: '#6b7280'}}>
+                                    {order.items?.length || 0} món
+                                </span>
+                            </div>
+
+                            <div className="card-title">{order.customerName}</div>
+                            <div className="card-subtitle">#{order.id} • {formatDate(order.createdAt)}</div>
+
+                            <div className="card-info-row"><Phone size={14}/> {order.phone}</div>
+                            <div className="card-info-row" style={{alignItems: 'flex-start'}}>
+                                <MapPin size={14} style={{marginTop: 2, flexShrink: 0}}/> 
+                                <span style={{display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', overflow: 'hidden'}}>{order.address}</span>
+                            </div>
+
+                            <div className="card-actions">
+                                <button className="btn-action btn-view" onClick={() => { setSelectedOrder(order); setIsModalOpen(true); }}>
+                                    <Eye size={16}/> Chi tiết
+                                </button>
+                                
+                                {/* Nút thao tác nhanh dựa trên trạng thái */}
+                                {order.status === 'PENDING' && (
+                                    <button className="btn-action" style={{background: '#dbeafe', color: '#2563eb'}} onClick={() => handleUpdateStatus(order.id, 'CONFIRMED')}>
+                                        <CheckCircle size={16}/> Duyệt
+                                    </button>
+                                )}
+                                {order.status === 'CONFIRMED' && (
+                                    <button className="btn-action" style={{background: '#ede9fe', color: '#7c3aed'}} onClick={() => handleUpdateStatus(order.id, 'SHIPPING')}>
+                                        <Truck size={16}/> Giao
+                                    </button>
+                                )}
+                                {order.status === 'SHIPPING' && (
+                                    <button className="btn-action" style={{background: '#d1fae5', color: '#059669'}} onClick={() => handleUpdateStatus(order.id, 'COMPLETED')}>
+                                        <Package size={16}/> Xong
+                                    </button>
+                                )}
+                                {['COMPLETED', 'CANCELLED'].includes(order.status) && (
+                                    <button className="btn-action" disabled style={{opacity: 0.5, cursor: 'default'}}>
+                                        <CheckSquare size={16}/> Đã xong
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                );
+            })
+        ) : (
+            <div style={{gridColumn: '1/-1', textAlign: 'center', padding: 50, color: '#9ca3af'}}>
+                <Package size={48} style={{margin: '0 auto 10px', opacity: 0.3}}/>
+                <p>Không tìm thấy đơn hàng nào</p>
             </div>
-          </div>
         )}
       </div>
 
-      {/* --- INVOICE MODAL --- */}
-      {isModalOpen && selectedOrder && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[1000] p-4" onClick={() => setIsModalOpen(false)}>
-          <div className="bg-white w-[800px] max-w-full max-h-[90vh] overflow-y-auto rounded-2xl shadow-2xl animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
-            <div ref={invoiceRef} className="bg-white p-0">
-              {/* Header Invoice */}
-              <div className="flex justify-between items-center p-6 border-b border-slate-100 bg-slate-50/50">
-                <div>
-                  <h3 className="text-xl font-bold text-slate-800">Đơn hàng <span className="text-blue-600">#{selectedOrder.id}</span></h3>
-                  <div className="text-sm text-slate-500 mt-1 flex items-center gap-2"><Clock size={14}/> {formatDate(selectedOrder.createdAt)}</div>
-                </div>
-                <div className="print-hide flex gap-2">
-                  <button onClick={handlePrint} className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-semibold hover:bg-slate-50 shadow-sm"><Printer size={16}/> In</button>
-                  <button onClick={() => setIsModalOpen(false)} className="p-2 bg-red-50 text-red-500 rounded-lg hover:bg-red-100"><XCircle size={20}/></button>
-                </div>
-              </div>
-
-              {/* Body Invoice */}
-              <div className="p-8">
-                <div className="grid grid-cols-2 gap-8 mb-8">
-                  <div>
-                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Khách hàng</h4>
-                    <p className="text-lg font-bold text-slate-800">{selectedOrder.customerName}</p>
-                    <p className="text-slate-600">{selectedOrder.phone}</p>
-                    <p className="text-slate-400 text-sm">{selectedOrder.email || 'Không có email'}</p>
-                  </div>
-                  <div className="text-right">
-                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Địa chỉ giao hàng</h4>
-                    <p className="font-medium text-slate-800">{selectedOrder.address}</p>
-                    <div className="mt-3">
-                      {(() => {
-                        const s = STATUS_CONFIG[selectedOrder.status] || STATUS_CONFIG.PENDING;
-                        return <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${s.bg} ${s.text}`}>{s.label}</span>
-                      })()}
-                    </div>
-                  </div>
-                </div>
-
-                <table className="w-full border-collapse mb-8">
-                  <thead>
-                    <tr className="border-b-2 border-slate-100">
-                      <th className="text-left py-3 text-sm font-semibold text-slate-500">Món ăn</th>
-                      <th className="text-center py-3 text-sm font-semibold text-slate-500 w-20">SL</th>
-                      <th className="text-right py-3 text-sm font-semibold text-slate-500 w-32">Thành tiền</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-50">
-                    {selectedOrder.items?.map((item, idx) => (
-                      <tr key={idx}>
-                        <td className="py-4">
-                          <p className="font-bold text-slate-700">{item.foodName}</p>
-                          {item.note && <p className="text-xs text-slate-400 italic mt-1">Ghi chú: {item.note}</p>}
-                        </td>
-                        <td className="py-4 text-center text-slate-600">x{item.quantity}</td>
-                        <td className="py-4 text-right font-medium text-slate-800">
-                          {item.price ? formatPrice(item.price * item.quantity) : '---'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-
-                <div className="flex justify-between items-center pt-6 border-t-2 border-slate-100">
-                  <div className="text-sm text-slate-500">Phương thức: <span className="font-semibold text-slate-700">Thanh toán khi nhận hàng (COD)</span></div>
-                  <div className="text-right">
-                    <p className="text-xs font-bold text-slate-400 uppercase">Tổng thanh toán</p>
-                    <p className="text-3xl font-extrabold text-blue-600 mt-1">{formatPrice(selectedOrder.totalAmount)}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+      {/* PAGINATION */}
+      {processedData.totalPages > 1 && (
+        <div className="pagination">
+            <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} className="page-btn"><ChevronLeft size={18}/></button>
+            {Array.from({length: processedData.totalPages}, (_, i) => i + 1).map(page => (
+                <button key={page} className={`page-btn ${currentPage === page ? 'active' : ''}`} onClick={() => setCurrentPage(page)}>
+                    {page}
+                </button>
+            ))}
+            <button disabled={currentPage === processedData.totalPages} onClick={() => setCurrentPage(p => p + 1)} className="page-btn"><ChevronRight size={18}/></button>
         </div>
       )}
 
-      {/* Print Style Inject */}
-      <style>{`
-        @media print {
-          .print-hide { display: none !important; }
-          body { background: white; }
-          .om-modal { box-shadow: none; border: none; }
-        }
-      `}</style>
+      {/* --- MODAL CHI TIẾT ĐƠN HÀNG (Style cũ nhưng clean lại) --- */}
+      {isModalOpen && selectedOrder && (
+         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setIsModalOpen(false)}>
+            <div className="bg-white w-[700px] max-h-[90vh] overflow-y-auto rounded-2xl shadow-2xl animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+                {/* Phần nội dung Modal giữ nguyên logic hiển thị chi tiết của bạn, chỉ bọc style cho gọn */}
+                <div ref={invoiceRef} className="p-10">
+                    <div className="flex justify-between items-start mb-8 border-b pb-6">
+                        <div>
+                            <h2 className="text-2xl font-black text-gray-800 uppercase">Hóa đơn</h2>
+                            <p className="text-gray-500 text-sm mt-1">#{selectedOrder.id} • {formatDate(selectedOrder.createdAt)}</p>
+                        </div>
+                        <div className="text-right">
+                            <h3 className="font-bold text-blue-600">FOOD NEST</h3>
+                            <p className="text-xs text-gray-400">Hotline: 1900 1234</p>
+                        </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-8 mb-8">
+                        <div>
+                            <p className="text-xs font-bold text-gray-400 uppercase">Khách hàng</p>
+                            <p className="font-bold text-lg">{selectedOrder.customerName}</p>
+                            <p className="text-sm text-gray-600">{selectedOrder.phone}</p>
+                        </div>
+                        <div className="text-right">
+                             <p className="text-xs font-bold text-gray-400 uppercase">Giao tới</p>
+                             <p className="font-medium text-sm">{selectedOrder.address}</p>
+                        </div>
+                    </div>
+
+                    <table className="w-full mb-8 text-sm">
+                        <thead className="bg-gray-50 text-gray-500 font-bold uppercase text-xs">
+                            <tr><th className="py-2 text-left pl-2">Món</th><th className="py-2 text-center">SL</th><th className="py-2 text-right pr-2">Tổng</th></tr>
+                        </thead>
+                        <tbody className="divide-y">
+                            {selectedOrder.items?.map((item, i) => (
+                                <tr key={i}>
+                                    <td className="py-3 pl-2 font-medium">{item.foodName}</td>
+                                    <td className="py-3 text-center">x{item.quantity}</td>
+                                    <td className="py-3 text-right pr-2 font-bold">{formatPrice(item.price * item.quantity)}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                    
+                    <div className="flex justify-end border-t pt-4">
+                        <div className="w-1/2 flex justify-between items-center">
+                            <span className="font-bold text-gray-800">Tổng thanh toán</span>
+                            <span className="text-2xl font-black text-blue-600">{formatPrice(selectedOrder.totalAmount)}</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div className="bg-gray-50 p-4 border-t flex justify-end gap-3 print:hidden">
+                    <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 rounded-lg text-sm font-semibold text-gray-600 hover:bg-gray-200">Đóng</button>
+                    <button onClick={handlePrint} className="px-4 py-2 rounded-lg text-sm font-semibold bg-gray-800 text-white hover:bg-black flex items-center gap-2"><Printer size={16}/> In hóa đơn</button>
+                </div>
+            </div>
+         </div>
+      )}
     </div>
   );
 };
-
-// --- SUB COMPONENTS (Để code gọn hơn) ---
-const StatCard = ({ icon, color, label, value }) => (
-  <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4 hover:-translate-y-1 transition-transform duration-200">
-    <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-xl shrink-0 ${color}`}>
-      {icon}
-    </div>
-    <div>
-      <div className="text-xs font-bold text-slate-400 uppercase tracking-wide">{label}</div>
-      <div className="text-xl font-extrabold text-slate-800 mt-1">{value}</div>
-    </div>
-  </div>
-);
-
-const BulkBtn = ({ label, color, onClick }) => (
-  <button onClick={onClick} className={`px-3 py-1.5 rounded-lg border text-xs font-bold bg-white transition-all ${color}`}>
-    {label}
-  </button>
-);
-
-const MenuItem = ({ icon, label, color = "text-slate-600", onClick }) => (
-  <button onClick={onClick} className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-slate-50 transition-colors ${color}`}>
-    {icon} {label}
-  </button>
-);
 
 export default OrderManager;

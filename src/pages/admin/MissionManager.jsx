@@ -23,7 +23,7 @@ const MissionManager = () => {
     try {
         setLoading(true);
         // Gọi API lấy toàn bộ danh sách nhiệm vụ hệ thống
-        const res = await api.get('/missions'); 
+        const res = await api.get('/api/missions'); 
         setMissions(Array.isArray(res.data) ? res.data : []);
     } catch(e) { 
         console.error("Lỗi lấy danh sách:", e);
@@ -33,7 +33,7 @@ const MissionManager = () => {
   };
 
   const fetchVouchers = async () => {
-      try { const res = await api.get('/vouchers'); setVouchers(res.data); } 
+      try { const res = await api.get('/api/vouchers'); setVouchers(res.data); } 
       catch(e) { console.error(e); }
   };
 
@@ -41,7 +41,7 @@ const MissionManager = () => {
     if(!newMission.title || !newMission.rewardVoucherId) return alert("Vui lòng điền đủ thông tin bắt buộc!");
     
     try {
-        await api.post('/missions', newMission); // API chuẩn RESTful thường là POST /missions
+        await api.post('/api/missions', newMission); // API chuẩn RESTful thường là POST /missions
         fetchMissions();
         setNewMission({ 
             title: '', description: '', type: 'ORDER_COUNT', targetValue: 1, 
@@ -57,7 +57,7 @@ const MissionManager = () => {
   const handleDelete = async (id) => {
       if(window.confirm("Bạn có chắc chắn muốn xóa nhiệm vụ này không?")) {
           try {
-              await api.delete(`/missions/${id}`);
+              await api.delete(`/api/missions/${id}`);
               setMissions(missions.filter(m => m.id !== id));
           } catch (e) {
               alert("Không thể xóa nhiệm vụ này.");

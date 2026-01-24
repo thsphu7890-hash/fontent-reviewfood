@@ -39,7 +39,7 @@ const VoucherMarket = () => {
   const fetchMarket = async () => {
     setLoading(true);
     try {
-      const res = await api.get('/user-vouchers/available');
+      const res = await api.get('api/user-vouchers/available');
       setVouchers(res.data);
     } catch (err) { console.error(err); } 
     finally { setTimeout(() => setLoading(false), 400); }
@@ -48,7 +48,7 @@ const VoucherMarket = () => {
   const fetchWallet = async () => {
     setLoading(true);
     try {
-      const res = await api.get(`/user-vouchers/my-wallet/${user.id}`);
+      const res = await api.get(`api/user-vouchers/my-wallet/${user.id}`);
       setMyVouchers(res.data);
     } catch (err) { console.error(err); } 
     finally { setTimeout(() => setLoading(false), 400); }
@@ -59,7 +59,7 @@ const VoucherMarket = () => {
 
     if (window.confirm(`Xác nhận dùng ${voucher.conditionValue} điểm để đổi Voucher này?`)) {
       try {
-        await api.post(`/user-vouchers/exchange?userId=${user.id}&voucherId=${voucher.id}`);
+        await api.post(`api/user-vouchers/exchange?userId=${user.id}&voucherId=${voucher.id}`);
         showToast("🎉 Đổi thành công! Voucher đã vào ví.", "success");
         setPoints(prev => prev - voucher.conditionValue);
         

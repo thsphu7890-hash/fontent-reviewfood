@@ -17,11 +17,11 @@ const UserDashboard = () => {
   const fetchData = async () => {
     try {
       // 1. Lấy thông tin User
-      const userRes = await api.get('/users/profile');
+      const userRes = await api.get('api/users/profile');
       setUser(userRes.data);
 
       // 2. Lấy đơn hàng gần nhất (chỉ lấy 3 đơn đầu)
-      const orderRes = await api.get('/orders/my-orders');
+      const orderRes = await api.get('api/orders/my-orders');
       setRecentOrders(orderRes.data.slice(0, 3));
     } catch (error) {
       console.error("Lỗi tải dashboard:", error);

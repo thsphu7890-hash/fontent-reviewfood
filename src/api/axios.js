@@ -1,19 +1,21 @@
+// File: src/api/axios.js
 import axios from 'axios';
 
 const api = axios.create({
-    // Đổi link này thành link Render của bạn
-    baseURL: 'https://backend-foodreview.onrender.com', 
+    baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8080',
+    withCredentials: true // Để nhận cookie nếu cần
 });
 
-// Tự động đính kèm Token vào Header cho mọi yêu cầu
-api.interceptors.request.use((config) => {
-    const token = localStorage.getItem('token');
-    if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-}, (error) => {
-    return Promise.reject(error);
-});
+// 👇 THÊM ĐOẠN NÀY: Tự động kẹp Token vào mỗi request 👇
+api.interceptors.request.use(
+    (config) => {
+        const token = localStorage.getItem('token'); // Lấy token từ bộ nhớ
+        if (token) {
+            config.headers['Authorization'] = `Bearer ${token}`; // Gắn vào Header
+        }
+        return config;
+    },
+    (error) => Promise.reject(error)
+);
 
 export default api;

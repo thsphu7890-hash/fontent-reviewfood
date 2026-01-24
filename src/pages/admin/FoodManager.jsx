@@ -29,8 +29,8 @@ const FoodManager = () => {
     try {
       setLoading(true);
       const [resFood, resCat] = await Promise.all([
-        api.get('/foods?size=1000'), 
-        api.get('/categories')
+        api.get('/api/food?size=1000'), 
+        api.get('/api/categories')
       ]);
       setFoods(Array.isArray(resFood.data) ? resFood.data : resFood.data.content || []);
       setCategories(resCat.data || []);
@@ -60,7 +60,7 @@ const FoodManager = () => {
   const handleDelete = async (id) => {
     if (!window.confirm("Bạn có chắc muốn xóa món ăn này không?")) return;
     try {
-      await api.delete(`/foods/${id}`);
+      await api.delete(`/api/food/${id}`);
       setFoods(prev => prev.filter(f => f.id !== id));
       toast.success("Đã xóa món ăn!");
     } catch (error) {
