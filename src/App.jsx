@@ -90,7 +90,7 @@ function App() {
             <Route path="/menu" element={<MenuPage />} />
             <Route path="/search" element={<SearchPage />} />
             <Route path="/restaurant/:id" element={<RestaurantDetail />} />
-            
+            <Route path="/restaurants" element={<Home />} />
             <Route path="/profile" element={<Profile />} />
             
             <Route path="/history" element={<History />} /> 

@@ -65,7 +65,7 @@ const DriverRegModal = ({ isOpen, onClose }) => {
       });
 
       // API Call
-      await api.post('api/driver/register', data, {
+      await api.post('/api/driver/register', data, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
 

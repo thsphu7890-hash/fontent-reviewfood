@@ -36,7 +36,7 @@ const Chatbot = () => {
       // 1. Dùng api.post thay vì fetch
       // - Không cần điền localhost:8080 (baseURL đã lo)
       // - Không cần điền Header Token (Interceptor request đã lo)
-      const response = await api.post('/chat', { 
+      const response = await api.post('/api/chat', { 
           message: userMessage 
       });
 

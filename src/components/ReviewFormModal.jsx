@@ -17,7 +17,7 @@ const ReviewFormModal = ({ isOpen, onClose, orderItem, onSuccess }) => {
         try {
             // Gọi API đánh giá (Cần đảm bảo Backend có endpoint này)
             // Ví dụ POST /api/reviews
-            await api.post('api/reviews', {
+            await api.post('/api/reviews', {
                 orderId: orderItem.orderId,
                 foodId: orderItem.foodId,
                 rating: rating,

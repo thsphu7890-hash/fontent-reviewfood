@@ -38,7 +38,7 @@ const Header = () => {
 
     try {
       // Gọi API lấy profile (Session Cookie tự gửi đi)
-      const response = await api.get('api/users/profile'); 
+      const response = await api.get('/api/users/profile'); 
       setUser(response.data);
       // Cập nhật lại localStorage để đồng bộ
       localStorage.setItem('user', JSON.stringify(response.data));
@@ -73,7 +73,7 @@ const Header = () => {
   const handleLogout = async () => {
     try {
         // 1. Báo Server xóa Session
-        await api.post('api/auth/logout');
+        await api.post('/api/auth/logout');
     } catch (err) {
         console.log("Lỗi logout server:", err);
     } finally {

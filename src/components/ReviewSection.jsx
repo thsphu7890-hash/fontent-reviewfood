@@ -17,7 +17,7 @@ const ReviewSection = ({ foodId }) => {
   // --- 1. FETCH DATA ---
   const fetchReviews = async () => {
     try {
-      const res = await api.get(`api/reviews/food/${foodId}`);
+      const res = await api.get(`/api/reviews/food/${foodId}`);
       // Giả lập dữ liệu reply và like nếu backend chưa có
       const enhancedData = res.data.map(r => ({
           ...r,

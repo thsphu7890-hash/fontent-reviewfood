@@ -56,7 +56,7 @@ const Profile = () => {
   const fetchOrders = async () => {
     setLoadingOrders(true);
     try {
-      const res = await api.get('/api/orders/my-orders');
+      const res = await api.get('api/orders/my-orders');
       setOrders(res.data);
     } catch (error) {
       console.log("Chưa có API đơn hàng, dùng dữ liệu mẫu.");

@@ -3,51 +3,39 @@ import Header from '../components/Header';
 import Footer from '../components/Footer';
 import { 
   Calendar, Clock, Tag, ChevronRight, 
-  Gift, Percent, MapPin, Search
+  Gift, Percent, MapPin, Search, ArrowRight, Sparkles
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
-import api from '../api/axios'; // 👇 Import axios instance đã cấu hình
+import api from '../api/axios';
 
 const EventPage = () => {
   const navigate = useNavigate();
-  
-  // --- STATE ---
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('ALL');
   const [searchTerm, setSearchTerm] = useState('');
 
-  // --- 1. GỌI API LẤY SỰ KIỆN TỪ BACKEND ---
   useEffect(() => {
     const fetchEvents = async () => {
       setLoading(true);
       try {
-        // Gọi API: GET /api/events
-        // (Nếu API của bạn là /public/events thì sửa lại đường dẫn nhé)
-        const res = await api.get('api/events'); 
-        
-        // Kiểm tra dữ liệu trả về để tránh lỗi
+        const res = await api.get('/api/events'); 
         const eventList = Array.isArray(res.data) ? res.data : (res.data.content || []);
-        
         setEvents(eventList);
       } catch (error) {
-        console.error("Lỗi tải sự kiện:", error);
-        // Không toast lỗi nếu chỉ là danh sách trống
         if (error.response?.status !== 404) {
-            toast.error("Không thể tải danh sách sự kiện");
+          toast.error("Không thể tải danh sách sự kiện");
         }
       } finally {
-        setLoading(false);
+        // Giả lập delay 1s để thấy hiệu ứng Skeleton xịn sò
+        setTimeout(() => setLoading(false), 800);
       }
     };
-
     fetchEvents();
   }, []);
 
-  // --- 2. LOGIC LỌC (FILTER) ---
   const filteredEvents = events.filter(event => {
-    // Backend cần trả về field 'type' là: PROMOTION, EVENT, hoặc NEWS
     const matchTab = activeTab === 'ALL' || event.type === activeTab;
     const matchSearch = (event.title || '').toLowerCase().includes(searchTerm.toLowerCase());
     return matchTab && matchSearch;
@@ -55,184 +43,213 @@ const EventPage = () => {
 
   const getBadgeInfo = (type) => {
     switch (type) {
-      case 'PROMOTION': return { color: '#ef4444', bg: '#fee2e2', text: 'Khuyến mãi', icon: <Percent size={14}/> };
-      case 'EVENT': return { color: '#8b5cf6', bg: '#f3e8ff', text: 'Sự kiện', icon: <Calendar size={14}/> };
-      case 'NEWS': return { color: '#10b981', bg: '#d1fae5', text: 'Tin tức', icon: <Tag size={14}/> };
-      default: return { color: '#64748b', bg: '#f1f5f9', text: 'Thông báo', icon: <Tag size={14}/> };
+      case 'PROMOTION': return { color: '#f43f5e', bg: '#fff1f2', text: 'Ưu đãi đặc biệt', icon: <Percent size={14}/> };
+      case 'EVENT': return { color: '#8b5cf6', bg: '#f5f3ff', text: 'Sự kiện độc quyền', icon: <Calendar size={14}/> };
+      case 'NEWS': return { color: '#10b981', bg: '#ecfdf5', text: 'Tin tức ẩm thực', icon: <Tag size={14}/> };
+      default: return { color: '#6366f1', bg: '#eef2ff', text: 'Thông báo', icon: <Sparkles size={14}/> };
     }
   };
 
-  // Hàm xử lý ảnh an toàn
   const getImg = (img) => {
-      if (!img) return "https://placehold.co/600x400?text=No+Image";
-      return img.startsWith('http') ? img : `http://localhost:8080${img}`;
+    if (!img) return "https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&q=80&w=1000";
+    return img.startsWith('http') ? img : `http://localhost:8080${img}`;
   };
 
   return (
-    <div style={{background: '#f8fafc', minHeight: '100vh', fontFamily: 'Inter, sans-serif'}}>
+    <div style={{background: '#fcfcfd', minHeight: '100vh', fontFamily: "'Plus Jakarta Sans', sans-serif"}}>
       <Header />
       
       <style>{`
-        .event-hero {
-          background: linear-gradient(135deg, #ef4444 0%, #f97316 100%);
-          color: white; padding: 60px 20px; text-align: center; margin-bottom: 40px;
-          border-radius: 0 0 40px 40px;
-          position: relative; overflow: hidden;
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap');
+        
+        .hero-section {
+          background: #111827;
+          background-image: linear-gradient(to right, rgba(0,0,0,0.7), rgba(0,0,0,0.3)), url('https://images.unsplash.com/photo-1555939594-58d7cb561ad1?auto=format&fit=crop&q=80&w=1600');
+          background-size: cover; background-position: center;
+          padding: 120px 20px 160px; text-align: center; color: white;
+          border-radius: 0 0 60px 60px; position: relative;
         }
-        .hero-pattern {
-          position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-          opacity: 0.1;
-          background-image: radial-gradient(#fff 2px, transparent 2px);
-          background-size: 30px 30px;
+
+        .filter-container {
+          background: rgba(255, 255, 255, 0.8);
+          backdrop-filter: blur(12px);
+          border: 1px solid rgba(255, 255, 255, 0.3);
+          border-radius: 24px; padding: 24px;
+          box-shadow: 0 20px 40px rgba(0,0,0,0.06);
+          margin-top: -80px;
         }
-        .filter-bar {
-          display: flex; gap: 10px; overflow-x: auto; padding-bottom: 5px;
+
+        .filter-pill {
+          padding: 10px 24px; border-radius: 14px; border: none;
+          background: transparent; color: #64748b; font-weight: 700;
+          cursor: pointer; transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+          font-size: 14px;
         }
-        .filter-btn {
-          padding: 8px 16px; border-radius: 20px; border: 1px solid #e2e8f0;
-          background: white; color: #64748b; font-weight: 600; cursor: pointer;
-          transition: 0.2s; white-space: nowrap;
+
+        .filter-pill.active {
+          background: #f43f5e; color: white;
+          box-shadow: 0 8px 16px rgba(244, 63, 94, 0.3);
         }
-        .filter-btn.active {
-          background: #1e293b; color: white; border-color: #1e293b;
-        }
+
         .event-card {
-          background: white; border-radius: 16px; overflow: hidden;
-          box-shadow: 0 4px 20px rgba(0,0,0,0.05); transition: 0.3s;
-          display: flex; flex-direction: column; height: 100%;
-          border: 1px solid #f1f5f9;
+          background: white; border-radius: 24px; overflow: hidden;
+          transition: 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+          border: 1px solid #f1f5f9; display: flex; flex-direction: column;
         }
-        .event-card:hover { transform: translateY(-5px); box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
-        
-        .card-img-wrapper { position: relative; height: 180px; overflow: hidden; }
-        .card-img { width: 100%; height: 100%; object-fit: cover; transition: 0.5s; }
-        .event-card:hover .card-img { transform: scale(1.05); }
-        
-        .discount-tag {
-          position: absolute; top: 10px; right: 10px;
-          background: #ef4444; color: white; padding: 4px 10px;
-          border-radius: 8px; font-weight: 700; font-size: 13px;
-          box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+
+        .event-card:hover {
+          transform: translateY(-12px);
+          box-shadow: 0 30px 60px -12px rgba(0,0,0,0.12);
+          border-color: #f43f5e;
         }
+
+        .card-image-box {
+          position: relative; height: 220px; overflow: hidden;
+        }
+
+        .image-zoom {
+          width: 100%; height: 100%; object-fit: cover;
+          transition: 0.8s ease;
+        }
+
+        .event-card:hover .image-zoom { transform: scale(1.1); }
+
+        .skeleton {
+          background: linear-gradient(90deg, #f1f5f9 25%, #f8fafc 50%, #f1f5f9 75%);
+          background-size: 200% 100%;
+          animation: loading 1.5s infinite;
+          border-radius: 12px;
+        }
+
+        @keyframes loading {
+          0% { background-position: 200% 0; }
+          100% { background-position: -200% 0; }
+        }
+
+        .action-button {
+          background: #111827; color: white; padding: 12px 24px;
+          border-radius: 12px; border: none; font-weight: 700;
+          display: flex; align-items: center; justify-content: center;
+          gap: 8px; cursor: pointer; transition: 0.3s;
+        }
+
+        .action-button:hover { background: #f43f5e; gap: 15px; }
       `}</style>
 
-      {/* 1. HERO BANNER */}
-      <div className="event-hero">
-        <div className="hero-pattern"></div>
-        <div style={{position: 'relative', zIndex: 2}}>
-            <h1 style={{fontSize: 36, fontWeight: 800, margin: '0 0 10px'}}>Sự Kiện & Ưu Đãi</h1>
-            <p style={{fontSize: 16, opacity: 0.9, maxWidth: 600, margin: '0 auto'}}>
-                Cập nhật những chương trình khuyến mãi và tin tức nóng hổi nhất.
-            </p>
+      {/* 1. HERO SECTION */}
+      <div className="hero-section">
+        <div style={{maxWidth: 800, margin: '0 auto'}}>
+          <h4 style={{textTransform: 'uppercase', letterSpacing: 4, fontSize: 14, fontWeight: 700, color: '#f43f5e', marginBottom: 16}}>Khám phá ngay</h4>
+          <h1 style={{fontSize: 'clamp(32px, 5vw, 56px)', fontWeight: 800, marginBottom: 20, lineHeight: 1.1}}>
+            Đặc Quyền Ẩm Thực <br/> & Sự Kiện Kết Nối
+          </h1>
+          <p style={{fontSize: 18, opacity: 0.9, fontWeight: 400}}>
+            Nơi hội tụ những hương vị đỉnh cao và những phút giây giải trí bất tận.
+          </p>
         </div>
       </div>
 
-      <div className="event-container" style={{maxWidth: 1100, margin: '-60px auto 40px', padding: '0 20px', position: 'relative', zIndex: 3}}>
+      <div style={{maxWidth: 1200, margin: '0 auto', padding: '0 20px 100px'}}>
         
-        {/* 2. SEARCH & FILTER */}
-        <div style={{background: 'white', padding: 20, borderRadius: 16, boxShadow: '0 4px 20px rgba(0,0,0,0.05)', marginBottom: 30}}>
-            <div style={{display: 'flex', gap: 15, marginBottom: 20, flexWrap: 'wrap'}}>
-                <div style={{flex: 1, position: 'relative', minWidth: 200}}>
-                    <Search size={18} style={{position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8'}}/>
-                    <input 
-                        type="text" 
-                        placeholder="Tìm kiếm sự kiện..." 
-                        style={{width: '100%', padding: '12px 12px 12px 40px', borderRadius: 8, border: '1px solid #e2e8f0', outline: 'none'}}
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                    />
-                </div>
+        {/* 2. FILTER CONTAINER */}
+        <div className="filter-container">
+          <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 20}}>
+            <div style={{display: 'flex', gap: 8}} className="filter-bar">
+              {['ALL', 'PROMOTION', 'EVENT', 'NEWS'].map(tab => (
+                <button 
+                  key={tab} 
+                  className={`filter-pill ${activeTab === tab ? 'active' : ''}`}
+                  onClick={() => setActiveTab(tab)}
+                >
+                  {tab === 'ALL' ? 'Tất cả' : tab === 'PROMOTION' ? 'Khuyến mãi' : tab === 'EVENT' ? 'Sự kiện' : 'Tin tức'}
+                </button>
+              ))}
             </div>
-
-            <div className="filter-bar">
-                {[
-                    {id: 'ALL', label: 'Tất cả'},
-                    {id: 'PROMOTION', label: 'Khuyến mãi'},
-                    {id: 'EVENT', label: 'Sự kiện'},
-                    {id: 'NEWS', label: 'Tin tức'}
-                ].map(tab => (
-                    <button 
-                        key={tab.id}
-                        className={`filter-btn ${activeTab === tab.id ? 'active' : ''}`}
-                        onClick={() => setActiveTab(tab.id)}
-                    >
-                        {tab.label}
-                    </button>
-                ))}
+            
+            <div style={{position: 'relative', minWidth: 280}}>
+              <Search size={20} style={{position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8'}}/>
+              <input 
+                type="text" 
+                placeholder="Tìm cảm hứng ẩm thực..." 
+                style={{width: '100%', padding: '14px 14px 14px 50px', borderRadius: 16, border: '1px solid #e2e8f0', outline: 'none', fontSize: 15, background: '#f8fafc'}}
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
             </div>
+          </div>
         </div>
 
-        {/* 3. EVENT LIST */}
-        {loading ? (
-            <div style={{textAlign: 'center', padding: 50, color: '#64748b'}}>
-                <div style={{display:'inline-block', width:30, height:30, border:'3px solid #cbd5e1', borderTopColor:'#ef4444', borderRadius:'50%', animation:'spin 1s linear infinite'}}></div>
-                <div style={{marginTop:10}}>Đang tải dữ liệu...</div>
-                <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
+        {/* 3. CONTENT AREA */}
+        <div style={{marginTop: 60}}>
+          {loading ? (
+            <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: 30}}>
+              {[1,2,3,4,5,6].map(i => (
+                <div key={i} style={{height: 450}} className="skeleton"></div>
+              ))}
             </div>
-        ) : (
-            <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 25}}>
+          ) : (
+            <>
+              <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: 30}}>
                 {filteredEvents.map((item) => {
-                    const badge = getBadgeInfo(item.type);
-                    return (
-                        <div key={item.id} className="event-card">
-                            <div className="card-img-wrapper">
-                                <img src={getImg(item.image)} className="card-img" alt={item.title}/>
-                                
-                                {item.discount && (
-                                    <div className="discount-tag">
-                                        -{item.discount}%
-                                    </div>
-                                )}
-                                
-                                <div style={{position: 'absolute', bottom: 10, left: 10, background: 'rgba(255,255,255,0.95)', padding: '4px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, color: badge.color, display: 'flex', alignItems: 'center', gap: 4, boxShadow:'0 2px 5px rgba(0,0,0,0.1)'}}>
-                                    {badge.icon} {badge.text}
-                                </div>
-                            </div>
-                            
-                            <div style={{padding: 20, display: 'flex', flexDirection: 'column', flex: 1}}>
-                                <h3 style={{margin: '0 0 10px', fontSize: 17, fontWeight: 700, color: '#1e293b', lineHeight: 1.4, minHeight: 48, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden'}}>
-                                    {item.title}
-                                </h3>
-                                
-                                <div style={{marginBottom: 15, display: 'flex', flexDirection: 'column', gap: 8}}>
-                                    <div style={{display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#64748b'}}>
-                                        <Calendar size={14} color="#94a3b8"/> 
-                                        {item.startDate ? new Date(item.startDate).toLocaleDateString('vi-VN') : 'Sắp diễn ra'} 
-                                        {item.endDate ? ` - ${new Date(item.endDate).toLocaleDateString('vi-VN')}` : ''}
-                                    </div>
-                                    <div style={{display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#64748b'}}>
-                                        <MapPin size={14} color="#94a3b8"/> {item.location || "Toàn hệ thống"}
-                                    </div>
-                                </div>
-
-                                <p style={{margin: '0 0 20px', fontSize: 14, color: '#475569', lineHeight: 1.5, flex: 1, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden'}}>
-                                    {item.description}
-                                </p>
-                                
-                                <button 
-                                    onClick={() => navigate(`/event/${item.id}`)}
-                                    style={{width: '100%', padding: '10px', background: 'white', color: '#1e293b', border: '1px solid #e2e8f0', borderRadius: 8, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, transition: '0.2s', fontSize: 14}}
-                                    onMouseOver={(e) => {e.target.style.background = '#1e293b'; e.target.style.color = 'white'}}
-                                    onMouseOut={(e) => {e.target.style.background = 'white'; e.target.style.color = '#1e293b'}}
-                                >
-                                    Xem chi tiết <ChevronRight size={14}/>
-                                </button>
-                            </div>
+                  const badge = getBadgeInfo(item.type);
+                  return (
+                    <div key={item.id} className="event-card">
+                      <div className="card-image-box">
+                        <img src={getImg(item.image)} className="image-zoom" alt={item.title}/>
+                        
+                        {item.discount && (
+                          <div style={{position: 'absolute', top: 20, right: 20, background: '#f43f5e', color: 'white', padding: '8px 14px', borderRadius: 12, fontWeight: 800, fontSize: 16, boxShadow: '0 10px 20px rgba(244, 63, 94, 0.4)'}}>
+                            -{item.discount}%
+                          </div>
+                        )}
+                        
+                        <div style={{position: 'absolute', bottom: 20, left: 20, background: 'white', padding: '6px 14px', borderRadius: 10, fontSize: 12, fontWeight: 700, color: badge.color, display: 'flex', alignItems: 'center', gap: 6, boxShadow: '0 4px 12px rgba(0,0,0,0.1)'}}>
+                          {badge.icon} {badge.text}
                         </div>
-                    )
+                      </div>
+                      
+                      <div style={{padding: '28px', flex: 1, display: 'flex', flexDirection: 'column'}}>
+                        <h3 style={{fontSize: 20, fontWeight: 800, color: '#111827', marginBottom: 12, lineHeight: 1.4}}>
+                          {item.title}
+                        </h3>
+                        
+                        <div style={{display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20}}>
+                          <div style={{display: 'flex', alignItems: 'center', gap: 10, fontSize: 14, color: '#64748b'}}>
+                            <Calendar size={16} /> 
+                            <span>{new Date(item.startDate).toLocaleDateString('vi-VN')} - {new Date(item.endDate).toLocaleDateString('vi-VN')}</span>
+                          </div>
+                          <div style={{display: 'flex', alignItems: 'center', gap: 10, fontSize: 14, color: '#64748b'}}>
+                            <MapPin size={16} /> 
+                            <span>{item.location || "Chi nhánh toàn quốc"}</span>
+                          </div>
+                        </div>
+
+                        <p style={{fontSize: 15, color: '#4b5563', lineHeight: 1.6, marginBottom: 24, flex: 1}}>
+                          {item.description}
+                        </p>
+                        
+                        <button className="action-button" onClick={() => navigate(`/event/${item.id}`)}>
+                          Khám phá chi tiết <ArrowRight size={18}/>
+                        </button>
+                      </div>
+                    </div>
+                  );
                 })}
-            </div>
-        )}
-        
-        {!loading && filteredEvents.length === 0 && (
-            <div style={{textAlign: 'center', padding: 60, color: '#94a3b8'}}>
-                <Gift size={48} style={{opacity: 0.2, marginBottom: 15}}/>
-                <p>Không tìm thấy sự kiện nào phù hợp.</p>
-            </div>
-        )}
+              </div>
 
+              {filteredEvents.length === 0 && (
+                <div style={{textAlign: 'center', padding: '100px 0'}}>
+                  <div style={{background: '#f1f5f9', width: 100, height: 100, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px'}}>
+                    <Gift size={40} color="#94a3b8"/>
+                  </div>
+                  <h3 style={{fontSize: 20, fontWeight: 700, color: '#1e293b'}}>Không tìm thấy kết quả</h3>
+                  <p style={{color: '#64748b'}}>Hãy thử tìm kiếm với từ khóa khác nhé!</p>
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </div>
-
       <Footer />
     </div>
   );

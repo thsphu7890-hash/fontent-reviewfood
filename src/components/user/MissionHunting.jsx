@@ -27,8 +27,8 @@ const MissionHunting = () => {
     try {
       // Gọi song song các API cần thiết
       const [userRes, missionRes] = await Promise.all([
-        api.get('api/users/profile'),
-        api.get('api/missions') // Backend trả về danh sách nhiệm vụ + trạng thái điểm danh
+        api.get('/api/users/profile'),
+        api.get('/api/missions') // Backend trả về danh sách nhiệm vụ + trạng thái điểm danh
       ]);
 
       setTotalPoints(userRes.data.points || 0);
