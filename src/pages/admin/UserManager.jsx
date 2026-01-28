@@ -2,8 +2,8 @@ import React, { useEffect, useState, useMemo } from 'react';
 import api from '../../api/axios';
 import { toast } from 'react-hot-toast';
 import { 
-  Search, Trash2, Edit, User, Mail, Phone, MapPin, 
-  Loader, Shield, ShieldAlert, CheckCircle, ChevronLeft, ChevronRight, MoreHorizontal
+  Search, Trash2, User, Mail, MapPin, 
+  Loader, Shield, ShieldAlert, ChevronLeft, ChevronRight, MoreHorizontal
 } from 'lucide-react';
 
 const UserManager = () => {
@@ -13,7 +13,7 @@ const UserManager = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('ALL');
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 8; // Tăng lên 8 để đẹp grid 4 cột
+  const itemsPerPage = 8; 
 
   // --- API CALLS ---
   const fetchUsers = async () => {
@@ -64,7 +64,11 @@ const UserManager = () => {
 
     // Filter
     if (roleFilter !== 'ALL') {
-      data = data.filter(u => u.role === roleFilter);
+      // Sửa lỗi so sánh role: Chuyển về chuỗi rỗng nếu null để tránh lỗi
+      data = data.filter(u => {
+        const r = u.role || '';
+        return r === roleFilter || r.includes(roleFilter);
+      });
     }
 
     // Pagination
@@ -77,9 +81,10 @@ const UserManager = () => {
 
   const stats = {
     total: users.length,
-    admin: users.filter(u => u.role === 'ADMIN' || u.role === 'ROLE_ADMIN').length,
-    user: users.filter(u => u.role === 'USER' || u.role === 'ROLE_USER').length,
-    driver: users.filter(u => u.role === 'DRIVER' || u.role === 'ROLE_DRIVER').length,
+    // Sửa logic thống kê để an toàn với null
+    admin: users.filter(u => (u.role || '').includes('ADMIN')).length,
+    user: users.filter(u => (u.role || '').includes('USER')).length,
+    driver: users.filter(u => (u.role || '').includes('DRIVER')).length,
   };
 
   return (
@@ -205,10 +210,14 @@ const UserManager = () => {
         <>
           <div className="user-grid">
             {processedData.currentData.map(u => {
+              // --- FIX LỖI Ở ĐÂY: Xử lý role bị null ---
               let roleClass = 'role-user';
               let RoleIcon = User;
-              if (u.role.includes('ADMIN')) { roleClass = 'role-admin'; RoleIcon = ShieldAlert; }
-              if (u.role.includes('DRIVER')) { roleClass = 'role-driver'; RoleIcon = MapPin; }
+              // Nếu u.role là null, dùng chuỗi rỗng '' để tránh lỗi includes
+              const safeRole = u.role || ''; 
+
+              if (safeRole.includes('ADMIN')) { roleClass = 'role-admin'; RoleIcon = ShieldAlert; }
+              if (safeRole.includes('DRIVER')) { roleClass = 'role-driver'; RoleIcon = MapPin; }
 
               return (
                 <div key={u.id} className="user-card">
@@ -225,7 +234,7 @@ const UserManager = () => {
                   <div className="user-email"><Mail size={12}/> {u.email}</div>
 
                   <div className={`role-badge ${roleClass}`}>
-                    <RoleIcon size={12}/> {u.role}
+                    <RoleIcon size={12}/> {u.role || 'NO ROLE'}
                   </div>
 
                   <div className="info-row">
