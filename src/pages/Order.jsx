@@ -1,20 +1,20 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useCart } from '../context/CartContext';
 import api from '../api/axios';
 import Header from '../components/Header';
-// import Footer from '../components/Footer'; 
 import toast, { Toaster } from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import { 
   Banknote, CreditCard, CheckCircle, MapPin, Ticket, 
   ArrowLeft, Clock, ShieldCheck, Zap, Wallet, User, 
-  Phone, FileText, Loader, Home as HomeIcon, ChevronRight, Map, X, Search
+  Phone, FileText, Loader, Home as HomeIcon, Map, X
 } from 'lucide-react';
 
 import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 
+// Fix lỗi icon Leaflet
 import icon from 'leaflet/dist/images/marker-icon.png';
 import iconShadow from 'leaflet/dist/images/marker-shadow.png';
 let DefaultIcon = L.icon({
@@ -26,12 +26,14 @@ let DefaultIcon = L.icon({
 });
 L.Marker.prototype.options.icon = DefaultIcon;
 
+// Dữ liệu mẫu Voucher (Thực tế nên lấy từ API)
 const MOCK_VOUCHERS = [
     { id: 1, code: 'WELCOME', desc: 'Giảm 20k cho đơn 0đ', value: 20000, minOrder: 0 },
     { id: 2, code: 'FREESHIP', desc: 'Giảm 15k phí vận chuyển', value: 15000, minOrder: 50000 },
     { id: 3, code: 'FOODNEST50', desc: 'Giảm 50k cho đơn 200k', value: 50000, minOrder: 200000 },
 ];
 
+// Component chọn vị trí trên bản đồ
 const LocationMarker = ({ position, setPosition, setTempAddress, setIsFetchingAddress }) => {
     const map = useMapEvents({
         click: async (e) => {
@@ -80,56 +82,59 @@ const Order = () => {
   
   const [loading, setLoading] = useState(false);
   
-  // --- 👇 ĐÃ FIX: Logic tìm tên thông minh hơn 👇 ---
+  // --- LẤY THÔNG TIN USER TỪ LOCALSTORAGE ---
   const [customerInfo, setCustomerInfo] = useState(() => {
       try {
           const stored = localStorage.getItem('user');
           if (!stored) return { phone: '', address: '', name: '' };
 
           const parsedData = JSON.parse(stored);
-          // Fix trường hợp dữ liệu bị lồng trong key 'user'
-          const realUser = parsedData.user || parsedData;
-
-          console.log("Order Page - User Info:", realUser); // Check log xem có fullName không
+          // Hỗ trợ cả 2 cấu trúc dữ liệu: { user: {...} } hoặc {...}
+          const userData = parsedData.user || parsedData;
 
           return { 
-            phone: realUser.phone || '', 
-            address: realUser.address || '',
-            // Tìm tên theo thứ tự ưu tiên
-            name: realUser.fullName || realUser.name || realUser.username || ''
+            phone: userData.phone || '', 
+            address: userData.address || '',
+            // Tìm tên theo nhiều trường có thể có
+            name: userData.fullName || userData.name || userData.username || ''
           };
       } catch (e) {
           return { phone: '', address: '', name: '' };
       }
   });
-  // ---------------------------------------------------
   
   const [paymentMethod, setPaymentMethod] = useState('CASH');
   const [deliveryTime, setDeliveryTime] = useState('NOW');
   const [note, setNote] = useState('');
   
+  // Voucher State
   const [voucherCode, setVoucherCode] = useState('');
   const [appliedVoucher, setAppliedVoucher] = useState(null); 
   const [discountAmount, setDiscountAmount] = useState(0);
   const [showVoucherModal, setShowVoucherModal] = useState(false);
 
+  // Map State
   const [showMapModal, setShowMapModal] = useState(false);
   const [mapPosition, setMapPosition] = useState({ lat: 10.762622, lng: 106.660172 });
   const [tempAddress, setTempAddress] = useState("");
   const [isFetchingAddress, setIsFetchingAddress] = useState(false);
 
+  // QR Payment State
   const [qrImage, setQrImage] = useState('');
   const [showQRModal, setShowQRModal] = useState(false);
 
   const SHIP_FEE = 15000;
+  // Tính tổng tiền cuối cùng (không âm)
   const finalTotal = Math.max(0, totalPrice + SHIP_FEE - discountAmount);
 
+  // --- XỬ LÝ VOUCHER ---
   const handleApplyVoucher = (codeInput = voucherCode) => {
     const codeToCheck = typeof codeInput === 'string' ? codeInput : voucherCode;
     
-    if (!codeToCheck.trim()) return toast.error("Vui lòng nhập hoặc chọn mã!");
+    if (!codeToCheck.trim()) return toast.error("Vui lòng nhập mã!");
     setLoading(true);
     
+    // Giả lập check voucher (Thực tế nên gọi API check mã)
     setTimeout(() => {
         const foundVoucher = MOCK_VOUCHERS.find(v => v.code === codeToCheck.toUpperCase());
 
@@ -146,12 +151,12 @@ const Order = () => {
                 setShowVoucherModal(false);
             }
         } else {
-            toast.error("Mã không hợp lệ!");
+            toast.error("Mã không hợp lệ hoặc đã hết hạn!");
             setAppliedVoucher(null);
             setDiscountAmount(0);
         }
         setLoading(false);
-    }, 500);
+    }, 600);
   };
 
   const handleSelectVoucher = (voucher) => {
@@ -159,6 +164,7 @@ const Order = () => {
       handleApplyVoucher(voucher.code);
   };
 
+  // --- XỬ LÝ BẢN ĐỒ ---
   const handleOpenMap = () => {
       setTempAddress(customerInfo.address || "Chưa chọn vị trí");
       setShowMapModal(true);
@@ -173,49 +179,83 @@ const Order = () => {
       toast.success("Đã cập nhật vị trí giao hàng!");
   };
 
+  // --- XỬ LÝ THANH TOÁN (FIX CHÍNH) ---
   const handleCheckout = async () => {
+    // 1. Kiểm tra đăng nhập
     const stored = localStorage.getItem('user');
-    if (!stored) return toast.error("Vui lòng đăng nhập để đặt hàng!");
+    if (!stored) {
+        toast.error("Phiên đăng nhập hết hạn, vui lòng đăng nhập lại!");
+        return navigate('/login');
+    }
     
     const parsedData = JSON.parse(stored);
-    const user = parsedData.user || parsedData; // Lấy ID chuẩn
+    const user = parsedData.user || parsedData;
 
-    if (!customerInfo.address || !customerInfo.phone) return toast.error("Vui lòng điền địa chỉ và SĐT!");
-    if (!customerInfo.name) return toast.error("Vui lòng điền tên người nhận!");
+    // 2. Validate thông tin nhập
+    if (!customerInfo.name?.trim()) return toast.error("Vui lòng điền tên người nhận!");
+    if (!customerInfo.phone?.trim()) return toast.error("Vui lòng điền số điện thoại!");
+    if (!customerInfo.address?.trim()) return toast.error("Vui lòng nhập địa chỉ giao hàng!");
     
-    const loadId = toast.loading("Đang xử lý đơn hàng...");
+    const loadId = toast.loading("Đang tạo đơn hàng...");
     setLoading(true);
 
     try {
+      // 3. Chuẩn bị dữ liệu gửi lên Server
       const orderData = {
-        userId: user.id,
+        userId: user.id, // Đảm bảo ID chính xác
         customerName: customerInfo.name,
         phone: customerInfo.phone,
         address: customerInfo.address,
         totalAmount: finalTotal, 
-        paymentMethod, 
-        note,
-        deliveryTime,
+        paymentMethod: paymentMethod, 
+        note: note || '',
+        deliveryTime: deliveryTime,
         voucherCode: appliedVoucher?.code || null,
-        items: cartItems.map(item => ({ foodId: item.id, quantity: item.quantity, price: item.price }))
+        // Map cart items sang format backend cần
+        items: cartItems.map(item => ({ 
+            foodId: item.id, 
+            quantity: item.quantity, 
+            price: item.price,
+            options: item.options || {} // Gửi kèm options nếu có (size, topping...)
+        }))
       };
 
-      const res = await api.post('/api/orders', orderData);
-      const newOrderId = res.data.id || Date.now(); 
+      console.log("Sending Order Data:", orderData); // Debug log
 
-      if (paymentMethod === 'BANK') {
-          const content = `ORDER${newOrderId}`;
-          setQrImage(`https://img.vietqr.io/image/MB-0333333333-compact.jpg?amount=${finalTotal}&addInfo=${content}&accountName=FOODNEST`);
-          setShowQRModal(true);
-          toast.success("Đơn hàng đã tạo! Vui lòng thanh toán.", { id: loadId });
+      // 4. Gọi API tạo đơn
+      const res = await api.post('/api/orders', orderData);
+
+      // 5. Xử lý kết quả thành công
+      if (res.status === 200 || res.status === 201) {
+          const newOrderId = res.data.id || res.data.orderId || Date.now(); 
+
+          // Nếu chọn chuyển khoản -> Hiện QR
+          if (paymentMethod === 'BANK') {
+              // Tạo link VietQR động
+              // Cấu trúc: https://img.vietqr.io/image/<BANK_ID>-<ACCOUNT_NO>-<TEMPLATE>.png?amount=<AMOUNT>&addInfo=<CONTENT>&accountName=<NAME>
+              // Thay MB và số tài khoản bên dưới bằng của bạn
+              const qrUrl = `https://img.vietqr.io/image/MB-0333333333-compact.jpg?amount=${finalTotal}&addInfo=ORDER ${newOrderId}&accountName=FOODNEST`;
+              
+              setQrImage(qrUrl);
+              setShowQRModal(true);
+              toast.success("Đơn hàng đã tạo! Vui lòng quét mã để thanh toán.", { id: loadId });
+              
+              // KHÔNG clear giỏ hàng ngay để user còn đối chiếu, chỉ clear khi họ bấm "Tôi đã thanh toán"
+          } else {
+              // Thanh toán tiền mặt (COD) -> Xong luôn
+              toast.success("Đặt hàng thành công!", { id: loadId });
+              clearCart(); // Xóa giỏ hàng
+              navigate('/history'); // Chuyển sang trang lịch sử
+          }
       } else {
-          toast.success("Đặt hàng thành công!", { id: loadId });
-          clearCart();
-          navigate('/history');
+          throw new Error("Server trả về lỗi không xác định");
       }
+
     } catch (err) {
-      console.error(err);
-      toast.error("Có lỗi xảy ra, vui lòng thử lại!", { id: loadId });
+      console.error("Checkout Error:", err);
+      // Hiển thị lỗi chi tiết từ backend nếu có
+      const errMsg = err.response?.data?.message || err.response?.data || "Có lỗi xảy ra, vui lòng thử lại!";
+      toast.error(typeof errMsg === 'string' ? errMsg : "Đặt hàng thất bại!", { id: loadId });
     } finally { 
         setLoading(false); 
     }
@@ -228,6 +268,23 @@ const Order = () => {
     { id: 'BANK', title: 'Chuyển khoản QR', icon: <CreditCard size={24}/>, sub: 'Quét mã VietQR nhanh chóng' },
     { id: 'WALLET', title: 'Ví điện tử', icon: <Wallet size={24}/>, sub: 'Momo / ZaloPay / VNPAY' },
   ];
+
+  // Nếu giỏ hàng rỗng, chuyển về trang chủ
+  if (cartItems.length === 0 && !showQRModal) {
+      return (
+          <div className="order-page flex items-center justify-center" style={{height:'100vh', flexDirection:'column', gap: 20}}>
+              <Header />
+              <img src="https://cdn-icons-png.flaticon.com/512/11329/11329060.png" alt="Empty" width={150}/>
+              <h2 style={{fontSize: 24, fontWeight: 700, color: '#374151'}}>Giỏ hàng đang trống!</h2>
+              <button 
+                onClick={() => navigate('/')}
+                style={{background:'#ef4444', color:'white', padding:'12px 24px', borderRadius: 8, fontWeight: 600, border:'none', cursor:'pointer'}}
+              >
+                  Quay lại đặt món
+              </button>
+          </div>
+      )
+  }
 
   return (
     <div className="order-page">
@@ -264,10 +321,14 @@ const Order = () => {
         .voucher-input-wrapper { position: relative; flex: 1; min-width: 0; }
         .btn-apply { background: #1f2937; color: white; padding: 0 20px; border-radius: 8px; font-weight: 600; font-size: 13px; cursor: pointer; border: none; white-space: nowrap; flex-shrink: 0; }
         .btn-apply:hover { background: #374151; }
+        .btn-apply:disabled { opacity: 0.6; cursor: not-allowed; }
         .bill-row { display: flex; justify-content: space-between; font-size: 14px; color: #6b7280; margin-bottom: 10px; }
         .bill-total { display: flex; justify-content: space-between; font-size: 18px; font-weight: 800; color: #111827; margin-top: 16px; padding-top: 16px; border-top: 1px solid #e5e7eb; }
         .btn-checkout { width: 100%; background: #ef4444; color: white; border: none; padding: 16px; border-radius: 12px; font-weight: 700; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 20px; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3); transition: 0.2s; }
         .btn-checkout:hover { background: #dc2626; transform: translateY(-2px); }
+        .btn-checkout:disabled { background: #9ca3af; cursor: not-allowed; box-shadow: none; transform: none; }
+        
+        /* MODAL STYLES */
         .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 2000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px); animation: fadeIn 0.3s; }
         .modal-content { background: white; padding: 24px; border-radius: 20px; max-width: 450px; width: 90%; position: relative; animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1); display: flex; flex-direction: column; max-height: 85vh; }
         .modal-close { position: absolute; top: 16px; right: 16px; background: #f3f4f6; border: none; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
@@ -275,6 +336,7 @@ const Order = () => {
         .voucher-item { border: 1px solid #e5e7eb; padding: 12px; border-radius: 12px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: 0.2s; }
         .voucher-item:hover { border-color: #ef4444; background: #fef2f2; }
         .voucher-tag { background: #fee2e2; color: #ef4444; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; margin-bottom: 4px; display: inline-block; }
+        
         .map-wrapper { height: 350px; width: 100%; margin-bottom: 16px; border-radius: 12px; overflow: hidden; border: 1px solid #e5e7eb; position: relative; }
         .leaflet-container { height: 100%; width: 100%; }
         .map-address-box { position: absolute; bottom: 10px; left: 10px; right: 10px; z-index: 1000; background: white; padding: 12px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); display: flex; flex-direction: column; gap: 4px; }
@@ -282,6 +344,7 @@ const Order = () => {
         .map-address-text { font-size: 13px; font-weight: 600; color: #1f2937; line-height: 1.4; }
         .btn-done { width: 100%; background: #10b981; color: white; border: none; padding: 14px; border-radius: 12px; font-weight: 700; cursor: pointer; transition: 0.2s; }
         .btn-done:hover { background: #059669; }
+        
         @keyframes fadeIn { from {opacity:0} to {opacity:1} }
         @keyframes slideUp { from {transform: translateY(20px); opacity: 0} to {transform: translateY(0); opacity: 1} }
       `}</style>
@@ -515,6 +578,7 @@ const Order = () => {
           </div>
       )}
 
+      {/* MODAL QR PAYMENT - Chỉ hiện khi chọn BANK và tạo đơn thành công */}
       {showQRModal && (
           <div className="modal-overlay">
               <div className="modal-content" style={{textAlign:'center'}}>
